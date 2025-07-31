@@ -1,0 +1,45 @@
+name: emtc_app
+description: Mobile app for Liaison Officers to collect survey data for eMTC project - Electronic Market for Textiles and Clothing (TC, GoI)
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.2
+  
+  # Database
+  sqflite: ^2.3.0
+  path_provider: ^2.1.1
+  
+  # Location services
+  location: ^6.0.0
+  
+  # Connectivity monitoring
+  connectivity_plus: ^5.0.2
+  
+  # HTTP requests
+  http: ^1.1.0
+  
+  # UI components
+  signature: ^5.4.0
+  
+  # State management
+  provider: ^6.1.1
+  
+  # Local storage
+  shared_preferences: ^2.2.2
+  
+  # Charts
+  fl_chart: ^0.66.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true 

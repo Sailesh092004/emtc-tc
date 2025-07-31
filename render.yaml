@@ -1,0 +1,23 @@
+# render.yaml - eMTC Backend Deployment Configuration
+
+services:
+  - type: web
+    name: emtc-backend
+    env: docker
+    plan: free
+    autoDeploy: true
+    dockerfilePath: backend/Dockerfile
+    healthCheckPath: /api/v1/ping
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./mtc_nanna.db
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 8000
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO
+    buildCommand: echo "Building MTC Nanna Backend..."
+    startCommand: uvicorn main:app --host 0.0.0.0 --port 8000 

@@ -1,0 +1,65 @@
+# .dockerignore for eMTC Backend
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Database files (will be created at runtime)
+*.db
+*.sqlite
+
+# Environment files
+.env
+config.env
+
+# Documentation
+README.md
+*.md
+
+# Test files
+test_*.py
+*_test.py
+
+# Docker
+Dockerfile
+.dockerignore 
