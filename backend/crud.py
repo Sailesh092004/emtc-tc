@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
+import json
 from database import DPR, MPR, FP
 from models import DPRCreate, MPRCreate, FPCreate
 import logging
@@ -12,16 +13,22 @@ logger = logging.getLogger(__name__)
 def create_dpr(db: Session, dpr_data: DPRCreate) -> DPR:
     """Create a new DPR record in the database"""
     try:
+        # Convert household members to JSON
+        household_members_json = json.dumps([member.dict() for member in dpr_data.household_members])
+        
         db_dpr = DPR(
-            household_id=dpr_data.household_id,
-            respondent_name=dpr_data.respondent_name,
-            age=dpr_data.age,
-            gender=dpr_data.gender,
-            education=dpr_data.education,
-            occupation=dpr_data.occupation,
-            income_level=dpr_data.income_level,
+            name_and_address=dpr_data.name_and_address,
+            district=dpr_data.district,
+            state=dpr_data.state,
+            family_size=dpr_data.family_size,
+            income_group=dpr_data.income_group,
+            centre_code=dpr_data.centre_code,
+            return_no=dpr_data.return_no,
+            month_and_year=dpr_data.month_and_year,
+            household_members=household_members_json,
             latitude=dpr_data.latitude,
             longitude=dpr_data.longitude,
+            otp_code=dpr_data.otp_code,
             created_at=datetime.now(),
             is_synced=False
         )
@@ -29,7 +36,7 @@ def create_dpr(db: Session, dpr_data: DPRCreate) -> DPR:
         db.commit()
         db.refresh(db_dpr)
         
-        logger.info(f"DPR record created successfully - ID: {db_dpr.id}, Household: {dpr_data.household_id}")
+        logger.info(f"DPR record created successfully - ID: {db_dpr.id}, Return No: {dpr_data.return_no}")
         return db_dpr
     except Exception as e:
         db.rollback()
@@ -61,15 +68,23 @@ def update_dpr_sync_status(db: Session, dpr_id: int, synced: bool = True):
 def create_mpr(db: Session, mpr_data: MPRCreate) -> MPR:
     """Create a new MPR record in the database"""
     try:
+        # Convert purchase items to JSON
+        items_json = json.dumps([item.dict() for item in mpr_data.items])
+        
         db_mpr = MPR(
-            household_id=mpr_data.household_id,
-            purchase_date=mpr_data.purchase_date,
-            textile_type=mpr_data.textile_type,
-            quantity=mpr_data.quantity,
-            price=mpr_data.price,
-            purchase_location=mpr_data.purchase_location,
+            name_and_address=mpr_data.name_and_address,
+            district_state_tel=mpr_data.district_state_tel,
+            panel_centre=mpr_data.panel_centre,
+            centre_code=mpr_data.centre_code,
+            return_no=mpr_data.return_no,
+            family_size=mpr_data.family_size,
+            income_group=mpr_data.income_group,
+            month_and_year=mpr_data.month_and_year,
+            occupation_of_head=mpr_data.occupation_of_head,
+            items=items_json,
             latitude=mpr_data.latitude,
             longitude=mpr_data.longitude,
+            otp_code=mpr_data.otp_code,
             created_at=datetime.now(),
             is_synced=False
         )
@@ -77,7 +92,7 @@ def create_mpr(db: Session, mpr_data: MPRCreate) -> MPR:
         db.commit()
         db.refresh(db_mpr)
         
-        logger.info(f"MPR record created successfully - ID: {db_mpr.id}, Household: {mpr_data.household_id}")
+        logger.info(f"MPR record created successfully - ID: {db_mpr.id}, Return No: {mpr_data.return_no}")
         return db_mpr
     except Exception as e:
         db.rollback()

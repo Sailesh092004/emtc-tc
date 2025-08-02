@@ -5,12 +5,8 @@ import '../models/mpr.dart';
 import '../models/fp.dart';
 
 class ApiService {
-  // eMTC FastAPI backend URL - update this to your actual backend URL
-  static const String _baseUrl = 'http://localhost:8000/api/v1';
-  
-  // For local development
-  static const String _localUrl = 'http://10.0.2.2:8000/api/v1'; // Android emulator
-  static const String _mockUrl = 'https://httpbin.org/post'; // Fallback
+  // eMTC FastAPI backend URL - Updated to use deployed backend
+  static const String _baseUrl = 'https://emtc-backend.onrender.com/api/v1';
 
   // Headers for API requests
   static const Map<String, String> _headers = {
@@ -25,20 +21,23 @@ class ApiService {
         Uri.parse('$_baseUrl/dpr'),
         headers: _headers,
         body: jsonEncode({
-          'household_id': dpr.householdId,
-          'respondent_name': dpr.householdHeadName,
-          'age': 35, // Default age - you might want to add this field to DPR model
-          'gender': 'Not Specified', // Default gender
-          'education': 'Not Specified', // Default education
-          'occupation': 'Not Specified', // Default occupation
-          'income_level': dpr.monthlyIncome.toString(),
+          'name_and_address': dpr.nameAndAddress,
+          'district': dpr.district,
+          'state': dpr.state,
+          'family_size': dpr.familySize,
+          'income_group': dpr.incomeGroup,
+          'centre_code': dpr.centreCode,
+          'return_no': dpr.returnNo,
+          'month_and_year': dpr.monthAndYear,
+          'household_members': dpr.householdMembers.map((member) => member.toMap()).toList(),
           'latitude': dpr.latitude,
           'longitude': dpr.longitude,
+          'otp_code': dpr.otpCode,
         }),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print('DPR synced successfully: ${dpr.householdId}');
+        print('DPR synced successfully: ${dpr.returnNo}');
         return true;
       } else {
         print('Failed to sync DPR: ${response.statusCode} - ${response.body}');
@@ -68,7 +67,7 @@ class ApiService {
           failed++;
         }
       } catch (e) {
-        print('Error syncing DPR ${dpr.householdId}: $e');
+        print('Error syncing DPR ${dpr.returnNo}: $e');
         failed++;
       }
     }
@@ -121,12 +120,6 @@ class ApiService {
     }
   }
 
-  // Get device ID (mock implementation)
-  Future<String> _getDeviceId() async {
-    // In a real app, this would get the actual device ID
-    return 'device_${DateTime.now().millisecondsSinceEpoch}';
-  }
-
   // Sync MPR data to backend
   Future<bool> syncMPR(MPR mpr) async {
     try {
@@ -134,19 +127,24 @@ class ApiService {
         Uri.parse('$_baseUrl/mpr'),
         headers: _headers,
         body: jsonEncode({
-          'household_id': mpr.householdId,
-          'purchase_date': mpr.purchaseDate.toIso8601String().split('T')[0], // Format as YYYY-MM-DD
-          'textile_type': mpr.textileType,
-          'quantity': mpr.quantity,
-          'price': mpr.price,
-          'purchase_location': mpr.purchaseLocation,
+          'name_and_address': mpr.nameAndAddress,
+          'district_state_tel': mpr.districtStateTel,
+          'panel_centre': mpr.panelCentre,
+          'centre_code': mpr.centreCode,
+          'return_no': mpr.returnNo,
+          'family_size': mpr.familySize,
+          'income_group': mpr.incomeGroup,
+          'month_and_year': mpr.monthAndYear,
+          'occupation_of_head': mpr.occupationOfHead,
+          'items': mpr.items.map((item) => item.toMap()).toList(),
           'latitude': mpr.latitude,
           'longitude': mpr.longitude,
+          'otp_code': mpr.otpCode,
         }),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        print('MPR synced successfully: ${mpr.householdId}');
+        print('MPR synced successfully: ${mpr.returnNo}');
         return true;
       } else {
         print('Failed to sync MPR: ${response.statusCode} - ${response.body}');
@@ -176,7 +174,7 @@ class ApiService {
           failed++;
         }
       } catch (e) {
-        print('Error syncing MPR ${mpr.householdId}: $e');
+        print('Error syncing MPR ${mpr.returnNo}: $e');
         failed++;
       }
     }

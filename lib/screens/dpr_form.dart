@@ -1,11 +1,6 @@
-import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:location/location.dart';
-import 'package:signature/signature.dart';
-import 'package:path_provider/path_provider.dart';
-import 'package:path/path.dart' as path;
 import '../models/dpr.dart';
 import '../services/db_service.dart';
 import '../services/api_service.dart';
@@ -19,19 +14,20 @@ class DPRFormScreen extends StatefulWidget {
 
 class _DPRFormScreenState extends State<DPRFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _signatureController = SignatureController(
-    penStrokeWidth: 3,
-    exportBackgroundColor: Colors.white,
-  );
 
-  // Form controllers
-  final _householdIdController = TextEditingController();
-  final _householdHeadNameController = TextEditingController();
-  final _addressController = TextEditingController();
-  final _phoneNumberController = TextEditingController();
+  // Header Form Controllers
+  final _nameAndAddressController = TextEditingController();
+  final _districtController = TextEditingController();
+  final _stateController = TextEditingController();
   final _familySizeController = TextEditingController();
-  final _monthlyIncomeController = TextEditingController();
+  final _incomeGroupController = TextEditingController();
+  final _centreCodeController = TextEditingController();
+  final _returnNoController = TextEditingController();
+  final _monthAndYearController = TextEditingController();
   final _otpController = TextEditingController();
+
+  // Household Members (up to 8)
+  final List<HouseholdMemberForm> _householdMembers = [];
 
   // Location data
   double _latitude = 0.0;
@@ -41,7 +37,6 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   // Form state
   bool _isSubmitting = false;
   bool _isOtpVerified = false;
-  String? _signaturePath;
 
   // OTP verification
   final ApiService _apiService = ApiService();
@@ -51,18 +46,24 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   void initState() {
     super.initState();
     _getCurrentLocation();
+    _monthAndYearController.text = '${DateTime.now().month}/${DateTime.now().year}';
+    _addHouseholdMember(); // Add first member by default
   }
 
   @override
   void dispose() {
-    _signatureController.dispose();
-    _householdIdController.dispose();
-    _householdHeadNameController.dispose();
-    _addressController.dispose();
-    _phoneNumberController.dispose();
+    _nameAndAddressController.dispose();
+    _districtController.dispose();
+    _stateController.dispose();
     _familySizeController.dispose();
-    _monthlyIncomeController.dispose();
+    _incomeGroupController.dispose();
+    _centreCodeController.dispose();
+    _returnNoController.dispose();
+    _monthAndYearController.dispose();
     _otpController.dispose();
+    for (var member in _householdMembers) {
+      member.dispose();
+    }
     super.dispose();
   }
 
@@ -124,16 +125,6 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   }
 
   Future<void> _verifyOTP() async {
-    if (_phoneNumberController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter phone number first'),
-          backgroundColor: Colors.red,
-        ),
-      );
-      return;
-    }
-
     if (_otpController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -149,10 +140,8 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     });
 
     try {
-      final isValid = await _apiService.verifyOTP(
-        _phoneNumberController.text,
-        _otpController.text,
-      );
+      // For testing, accept any OTP
+      final isValid = _otpController.text.isNotEmpty;
 
       setState(() {
         _isOtpVerified = isValid;
@@ -187,72 +176,33 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     }
   }
 
-  Future<void> _captureSignature() async {
-    final result = await showDialog<Uint8List?>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Digital Signature'),
-        content: SizedBox(
-          height: 200,
-          child: Signature(
-            controller: _signatureController,
-            backgroundColor: Colors.white,
-          ),
+  void _addHouseholdMember() {
+    if (_householdMembers.length < 8) {
+      setState(() {
+        _householdMembers.add(HouseholdMemberForm());
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Maximum 8 household members allowed'),
+          backgroundColor: Colors.orange,
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              _signatureController.clear();
-              Navigator.pop(context);
-            },
-            child: const Text('Clear'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              final signature = await _signatureController.toPngBytes();
-              Navigator.pop(context, signature);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (result != null) {
-      await _saveSignature(result);
+      );
     }
   }
 
-  Future<void> _saveSignature(Uint8List signatureBytes) async {
-    try {
-      final directory = await getApplicationDocumentsDirectory();
-      final fileName = 'signature_${DateTime.now().millisecondsSinceEpoch}.png';
-      final file = File(path.join(directory.path, fileName));
-      
-      await file.writeAsBytes(signatureBytes);
-      
-      setState(() {
-        _signaturePath = file.path;
-      });
+  void _removeHouseholdMember(int index) {
+    setState(() {
+      _householdMembers[index].dispose();
+      _householdMembers.removeAt(index);
+    });
+  }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Signature saved successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error saving signature: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+  void _calculateTotalIncome(HouseholdMemberForm member) {
+    final jobIncome = double.tryParse(member.annualIncomeJobController.text) ?? 0.0;
+    final otherIncome = double.tryParse(member.annualIncomeOtherController.text) ?? 0.0;
+    final total = jobIncome + otherIncome;
+    member.totalIncomeController.text = total.toStringAsFixed(2);
   }
 
   Future<void> _submitForm() async {
@@ -270,10 +220,10 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
       return;
     }
 
-    if (_signaturePath == null) {
+    if (_householdMembers.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please capture signature before submitting'),
+          content: Text('Please add at least one household member'),
           backgroundColor: Colors.red,
         ),
       );
@@ -285,17 +235,33 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     });
 
     try {
+      // Convert form data to HouseholdMember objects
+      final members = _householdMembers.map((form) => HouseholdMember(
+        name: form.nameController.text,
+        relationshipWithHead: form.relationshipController.text,
+        gender: form.genderController.text,
+        age: int.parse(form.ageController.text),
+        education: form.educationController.text,
+        occupation: form.occupationController.text,
+        annualIncomeJob: double.parse(form.annualIncomeJobController.text),
+        annualIncomeOther: double.parse(form.annualIncomeOtherController.text),
+        otherIncomeSource: form.otherIncomeSourceController.text,
+        totalIncome: double.parse(form.totalIncomeController.text),
+      )).toList();
+
       final dpr = DPR(
-        householdId: _householdIdController.text,
-        householdHeadName: _householdHeadNameController.text,
-        address: _addressController.text,
-        phoneNumber: _phoneNumberController.text,
+        nameAndAddress: _nameAndAddressController.text,
+        district: _districtController.text,
+        state: _stateController.text,
         familySize: int.parse(_familySizeController.text),
-        monthlyIncome: double.parse(_monthlyIncomeController.text),
+        incomeGroup: _incomeGroupController.text,
+        centreCode: _centreCodeController.text,
+        returnNo: _returnNoController.text,
+        monthAndYear: _monthAndYearController.text,
+        householdMembers: members,
         latitude: _latitude,
         longitude: _longitude,
         otpCode: _otpController.text,
-        signaturePath: _signaturePath!,
         createdAt: DateTime.now(),
       );
 
@@ -315,10 +281,10 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
 
       // Clear form
       _formKey.currentState!.reset();
-      _signatureController.clear();
       setState(() {
-        _signaturePath = null;
         _isOtpVerified = false;
+        _householdMembers.clear();
+        _addHouseholdMember();
       });
 
       // Navigate back
@@ -336,6 +302,516 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     }
   }
 
+  Widget _buildLocationCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _isLocationLoading ? Icons.location_searching : Icons.location_on,
+                  color: _isLocationLoading ? Colors.orange : Colors.green,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _isLocationLoading ? 'Getting Location...' : 'Location Captured',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            if (!_isLocationLoading) ...[
+              const SizedBox(height: 8),
+              Text('Latitude: ${_latitude.toStringAsFixed(6)}'),
+              Text('Longitude: ${_longitude.toStringAsFixed(6)}'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Header Information',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+        
+        TextFormField(
+          controller: _nameAndAddressController,
+          decoration: const InputDecoration(
+            labelText: 'Name & Address *',
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter name and address';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _districtController,
+                decoration: const InputDecoration(
+                  labelText: 'District *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter district';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextFormField(
+                controller: _stateController,
+                decoration: const InputDecoration(
+                  labelText: 'State *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter state';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _familySizeController,
+                decoration: const InputDecoration(
+                  labelText: 'Family Size *',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter family size';
+                  }
+                  if (int.tryParse(value) == null) {
+                    return 'Please enter a valid number';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextFormField(
+                controller: _incomeGroupController,
+                decoration: const InputDecoration(
+                  labelText: 'Income Group *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter income group';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _centreCodeController,
+                decoration: const InputDecoration(
+                  labelText: 'Centre Code *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter centre code';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextFormField(
+                controller: _returnNoController,
+                decoration: const InputDecoration(
+                  labelText: 'Return No. *',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter return number';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        TextFormField(
+          controller: _monthAndYearController,
+          decoration: const InputDecoration(
+            labelText: 'Month & Year *',
+            border: OutlineInputBorder(),
+            hintText: 'MM/YYYY',
+          ),
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Please enter month and year';
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHouseholdMembersSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Household Members (Max 8)',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            ElevatedButton.icon(
+              onPressed: _addHouseholdMember,
+              icon: const Icon(Icons.add),
+              label: const Text('Add Member'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (_householdMembers.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'No household members added yet. Click "Add Member" to start.',
+                style: TextStyle(fontStyle: FontStyle.italic),
+              ),
+            ),
+          )
+        else
+          ..._householdMembers.asMap().entries.map((entry) {
+            final index = entry.key;
+            final member = entry.value;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Member ${index + 1}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        if (_householdMembers.length > 1)
+                          IconButton(
+                            onPressed: () => _removeHouseholdMember(index),
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            tooltip: 'Remove Member',
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.nameController,
+                            decoration: const InputDecoration(
+                              labelText: 'Name *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter name';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.relationshipController,
+                            decoration: const InputDecoration(
+                              labelText: 'Relationship with Head *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter relationship';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.genderController,
+                            decoration: const InputDecoration(
+                              labelText: 'Gender (M/F/Other) *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter gender';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.ageController,
+                            decoration: const InputDecoration(
+                              labelText: 'Age *',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter age';
+                              }
+                              if (int.tryParse(value) == null) {
+                                return 'Please enter a valid age';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.educationController,
+                            decoration: const InputDecoration(
+                              labelText: 'Education *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter education';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.occupationController,
+                            decoration: const InputDecoration(
+                              labelText: 'Occupation *',
+                              border: OutlineInputBorder(),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter occupation';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.annualIncomeJobController,
+                            decoration: const InputDecoration(
+                              labelText: 'Annual Income (Job) *',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => _calculateTotalIncome(member),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter job income';
+                              }
+                              if (double.tryParse(value) == null) {
+                                return 'Please enter a valid amount';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: member.annualIncomeOtherController,
+                            decoration: const InputDecoration(
+                              labelText: 'Annual Income (Other) *',
+                              border: OutlineInputBorder(),
+                            ),
+                            keyboardType: TextInputType.number,
+                            onChanged: (_) => _calculateTotalIncome(member),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter other income';
+                              }
+                              if (double.tryParse(value) == null) {
+                                return 'Please enter a valid amount';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+
+                    TextFormField(
+                      controller: member.otherIncomeSourceController,
+                      decoration: const InputDecoration(
+                        labelText: 'Other Income Source Name *',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter other income source';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
+                    TextFormField(
+                      controller: member.totalIncomeController,
+                      decoration: const InputDecoration(
+                        labelText: 'Total Income (Auto-calculated) *',
+                        border: OutlineInputBorder(),
+                      ),
+                      readOnly: true,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Total income is required';
+                        }
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }).toList(),
+      ],
+    );
+  }
+
+  Widget _buildOTPSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'OTP Verification',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _otpController,
+                decoration: const InputDecoration(
+                  labelText: 'OTP *',
+                  border: OutlineInputBorder(),
+                  hintText: 'Enter any OTP for testing',
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter OTP';
+                  }
+                  return null;
+                },
+              ),
+            ),
+            const SizedBox(width: 16),
+            ElevatedButton(
+              onPressed: _isOtpLoading ? null : _verifyOTP,
+              child: _isOtpLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Verify'),
+            ),
+          ],
+        ),
+        if (_isOtpVerified) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.check_circle, color: Colors.green, size: 16),
+              const SizedBox(width: 8),
+              Text(
+                'OTP verified successfully',
+                style: TextStyle(color: Colors.green[700]),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -349,253 +825,31 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
           ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
+             body: Form(
+         key: _formKey,
+         child: Scrollbar(
+           thumbVisibility: true,
+           trackVisibility: true,
+           child: SingleChildScrollView(
+             padding: const EdgeInsets.all(16.0),
+             physics: const BouncingScrollPhysics(),
+             child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Location Status
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(
-                            _isLocationLoading ? Icons.location_searching : Icons.location_on,
-                            color: _isLocationLoading ? Colors.orange : Colors.green,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _isLocationLoading ? 'Getting Location...' : 'Location Captured',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      if (!_isLocationLoading) ...[
-                        const SizedBox(height: 8),
-                        Text('Latitude: ${_latitude.toStringAsFixed(6)}'),
-                        Text('Longitude: ${_longitude.toStringAsFixed(6)}'),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Household Information
-              const Text(
-                'Household Information',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _householdIdController,
-                decoration: const InputDecoration(
-                  labelText: 'Household ID *',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter household ID';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _householdHeadNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Household Head Name *',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter household head name';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _addressController,
-                decoration: const InputDecoration(
-                  labelText: 'Address *',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter address';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _phoneNumberController,
-                decoration: const InputDecoration(
-                  labelText: 'Phone Number *',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.phone,
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter phone number';
-                  }
-                  if (value.length < 10) {
-                    return 'Please enter a valid phone number';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _familySizeController,
-                      decoration: const InputDecoration(
-                        labelText: 'Family Size *',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter family size';
-                        }
-                        if (int.tryParse(value) == null) {
-                          return 'Please enter a valid number';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _monthlyIncomeController,
-                      decoration: const InputDecoration(
-                        labelText: 'Monthly Income (₹) *',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter monthly income';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return 'Please enter a valid amount';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
+              _buildLocationCard(),
               const SizedBox(height: 24),
+
+              // Header Information
+              _buildHeaderSection(),
+              const SizedBox(height: 32),
+
+              // Household Members
+              _buildHouseholdMembersSection(),
+              const SizedBox(height: 32),
 
               // OTP Verification
-              const Text(
-                'OTP Verification',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _otpController,
-                      decoration: const InputDecoration(
-                        labelText: 'OTP *',
-                        border: OutlineInputBorder(),
-                        hintText: 'Enter 123456 for testing',
-                      ),
-                      keyboardType: TextInputType.number,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter OTP';
-                        }
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  ElevatedButton(
-                    onPressed: _isOtpLoading ? null : _verifyOTP,
-                    child: _isOtpLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Verify'),
-                  ),
-                ],
-              ),
-              if (_isOtpVerified) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'OTP verified successfully',
-                      style: TextStyle(color: Colors.green[700]),
-                    ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 24),
-
-              // Signature
-              const Text(
-                'Digital Signature',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    children: [
-                      if (_signaturePath != null) ...[
-                        Container(
-                          height: 100,
-                          decoration: BoxDecoration(
-                            border: Border.all(color: Colors.grey),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.file(
-                              File(_signaturePath!),
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                      ],
-                      ElevatedButton.icon(
-                        onPressed: _captureSignature,
-                        icon: const Icon(Icons.edit),
-                        label: Text(_signaturePath == null ? 'Capture Signature' : 'Re-capture Signature'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              _buildOTPSection(),
               const SizedBox(height: 32),
 
               // Submit Button
@@ -619,10 +873,38 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
                       )
                     : const Text('Submit DPR Form'),
               ),
-            ],
-          ),
-        ),
-      ),
+                             const SizedBox(height: 32), // Extra padding at bottom
+             ],
+           ),
+         ),
+       ),
+     ),
     );
+  }
+}
+
+class HouseholdMemberForm {
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController relationshipController = TextEditingController();
+  final TextEditingController genderController = TextEditingController();
+  final TextEditingController ageController = TextEditingController();
+  final TextEditingController educationController = TextEditingController();
+  final TextEditingController occupationController = TextEditingController();
+  final TextEditingController annualIncomeJobController = TextEditingController();
+  final TextEditingController annualIncomeOtherController = TextEditingController();
+  final TextEditingController otherIncomeSourceController = TextEditingController();
+  final TextEditingController totalIncomeController = TextEditingController();
+
+  void dispose() {
+    nameController.dispose();
+    relationshipController.dispose();
+    genderController.dispose();
+    ageController.dispose();
+    educationController.dispose();
+    occupationController.dispose();
+    annualIncomeJobController.dispose();
+    annualIncomeOtherController.dispose();
+    otherIncomeSourceController.dispose();
+    totalIncomeController.dispose();
   }
 } 

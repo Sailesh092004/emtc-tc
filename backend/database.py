@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -35,15 +35,18 @@ class DPR(Base):
     __tablename__ = "dpr"
     
     id = Column(Integer, primary_key=True, index=True)
-    household_id = Column(String, index=True)
-    respondent_name = Column(String)
-    age = Column(Integer)
-    gender = Column(String)
-    education = Column(String)
-    occupation = Column(String)
-    income_level = Column(String)
+    name_and_address = Column(String)
+    district = Column(String)
+    state = Column(String)
+    family_size = Column(Integer)
+    income_group = Column(String)
+    centre_code = Column(String)
+    return_no = Column(String)
+    month_and_year = Column(String)
+    household_members = Column(JSON)  # Store as JSON array
     latitude = Column(Float)
     longitude = Column(Float)
+    otp_code = Column(String)
     created_at = Column(DateTime)
     is_synced = Column(Boolean, default=False)
 
@@ -51,14 +54,19 @@ class MPR(Base):
     __tablename__ = "mpr"
     
     id = Column(Integer, primary_key=True, index=True)
-    household_id = Column(String, index=True)
-    purchase_date = Column(String)
-    textile_type = Column(String)
-    quantity = Column(Integer)
-    price = Column(Float)
-    purchase_location = Column(String)
+    name_and_address = Column(String)
+    district_state_tel = Column(String)
+    panel_centre = Column(String)
+    centre_code = Column(String)
+    return_no = Column(String)
+    family_size = Column(Integer)
+    income_group = Column(String)
+    month_and_year = Column(String)
+    occupation_of_head = Column(String)
+    items = Column(JSON)  # Store as JSON array of PurchaseItem objects
     latitude = Column(Float)
     longitude = Column(Float)
+    otp_code = Column(String)
     created_at = Column(DateTime)
     is_synced = Column(Boolean, default=False)
 

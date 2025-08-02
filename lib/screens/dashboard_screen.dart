@@ -31,7 +31,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     try {
       final dbService = Provider.of<DatabaseService>(context, listen: false);
-      final syncService = Provider.of<SyncService>(context, listen: false);
       
       // Load database statistics
       final stats = await dbService.getDatabaseStats();
@@ -81,9 +80,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
               onRefresh: _loadDashboardData,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
+              child: Scrollbar(
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildStatsSection(),
@@ -95,6 +97,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
+          ),
     );
   }
 
@@ -230,16 +233,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 return Row(
                   children: [
                     Icon(
-                      syncService.isConnected ? Icons.wifi : Icons.wifi_off,
-                      color: syncService.isConnected ? Colors.green : Colors.red,
+                      syncService.isOnline ? Icons.wifi : Icons.wifi_off,
+                      color: syncService.isOnline ? Colors.green : Colors.red,
                     ),
                     const SizedBox(width: 8),
                     Text(
-                      syncService.isConnected ? 'Online' : 'Offline',
+                      syncService.isOnline ? 'Online' : 'Offline',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w500,
-                        color: syncService.isConnected ? Colors.green : Colors.red,
+                        color: syncService.isOnline ? Colors.green : Colors.red,
                       ),
                     ),
                   ],

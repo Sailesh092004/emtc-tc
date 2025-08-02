@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -10,7 +11,7 @@ import '../models/fp.dart';
 class DatabaseService extends ChangeNotifier {
   static Database? _database;
   static const String _databaseName = 'mtc_nanna.db';
-  static const int _databaseVersion = 1;
+  static const int _databaseVersion = 3; // Increment version for schema changes
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -31,37 +32,44 @@ class DatabaseService extends ChangeNotifier {
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // DPR table
+    // DPR table - Updated structure
     await db.execute('''
       CREATE TABLE dpr (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        householdId TEXT NOT NULL,
-        householdHeadName TEXT NOT NULL,
-        address TEXT NOT NULL,
-        phoneNumber TEXT NOT NULL,
+        nameAndAddress TEXT NOT NULL,
+        district TEXT NOT NULL,
+        state TEXT NOT NULL,
         familySize INTEGER NOT NULL,
-        monthlyIncome REAL NOT NULL,
+        incomeGroup TEXT NOT NULL,
+        centreCode TEXT NOT NULL,
+        returnNo TEXT NOT NULL,
+        monthAndYear TEXT NOT NULL,
+        householdMembers TEXT NOT NULL,
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
         otpCode TEXT NOT NULL,
-        signaturePath TEXT NOT NULL,
         createdAt TEXT NOT NULL,
         isSynced INTEGER NOT NULL DEFAULT 0
       )
     ''');
 
-    // MPR table
+    // MPR table - Updated structure
     await db.execute('''
       CREATE TABLE mpr (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        householdId TEXT NOT NULL,
-        purchaseDate TEXT NOT NULL,
-        textileType TEXT NOT NULL,
-        quantity INTEGER NOT NULL,
-        price REAL NOT NULL,
-        purchaseLocation TEXT NOT NULL,
+        nameAndAddress TEXT NOT NULL,
+        districtStateTel TEXT NOT NULL,
+        panelCentre TEXT NOT NULL,
+        centreCode TEXT NOT NULL,
+        returnNo TEXT NOT NULL,
+        familySize INTEGER NOT NULL,
+        incomeGroup TEXT NOT NULL,
+        monthAndYear TEXT NOT NULL,
+        occupationOfHead TEXT NOT NULL,
+        items TEXT NOT NULL,
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
+        otpCode TEXT NOT NULL,
         createdAt TEXT NOT NULL,
         isSynced INTEGER NOT NULL DEFAULT 0
       )
@@ -88,13 +96,83 @@ class DatabaseService extends ChangeNotifier {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Handle database upgrades here
+    if (oldVersion < 3) {
+      // Drop old tables and recreate with new structure
+      await db.execute('DROP TABLE IF EXISTS dpr');
+      await db.execute('DROP TABLE IF EXISTS mpr');
+      
+      // Recreate DPR table with new structure
+      await db.execute('''
+        CREATE TABLE dpr (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nameAndAddress TEXT NOT NULL,
+          district TEXT NOT NULL,
+          state TEXT NOT NULL,
+          familySize INTEGER NOT NULL,
+          incomeGroup TEXT NOT NULL,
+          centreCode TEXT NOT NULL,
+          returnNo TEXT NOT NULL,
+          monthAndYear TEXT NOT NULL,
+          householdMembers TEXT NOT NULL,
+          latitude REAL NOT NULL,
+          longitude REAL NOT NULL,
+          otpCode TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          isSynced INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+
+      // Recreate MPR table with new structure
+      await db.execute('''
+        CREATE TABLE mpr (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          nameAndAddress TEXT NOT NULL,
+          districtStateTel TEXT NOT NULL,
+          panelCentre TEXT NOT NULL,
+          centreCode TEXT NOT NULL,
+          returnNo TEXT NOT NULL,
+          familySize INTEGER NOT NULL,
+          incomeGroup TEXT NOT NULL,
+          monthAndYear TEXT NOT NULL,
+          occupationOfHead TEXT NOT NULL,
+          items TEXT NOT NULL,
+          latitude REAL NOT NULL,
+          longitude REAL NOT NULL,
+          otpCode TEXT NOT NULL,
+          createdAt TEXT NOT NULL,
+          isSynced INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+    }
   }
 
   // DPR CRUD Operations
   Future<int> insertDPR(DPR dpr) async {
     final db = await database;
-    final id = await db.insert('dpr', dpr.toMap());
+    
+    // Convert householdMembers to JSON string
+    final householdMembersJson = jsonEncode(
+      dpr.householdMembers.map((member) => member.toMap()).toList()
+    );
+    
+    final data = {
+      'nameAndAddress': dpr.nameAndAddress,
+      'district': dpr.district,
+      'state': dpr.state,
+      'familySize': dpr.familySize,
+      'incomeGroup': dpr.incomeGroup,
+      'centreCode': dpr.centreCode,
+      'returnNo': dpr.returnNo,
+      'monthAndYear': dpr.monthAndYear,
+      'householdMembers': householdMembersJson,
+      'latitude': dpr.latitude,
+      'longitude': dpr.longitude,
+      'otpCode': dpr.otpCode,
+      'createdAt': dpr.createdAt.toIso8601String(),
+      'isSynced': dpr.isSynced ? 1 : 0,
+    };
+    
+    final id = await db.insert('dpr', data);
     notifyListeners();
     return id;
   }
@@ -154,7 +232,31 @@ class DatabaseService extends ChangeNotifier {
   // MPR CRUD Operations
   Future<int> insertMPR(MPR mpr) async {
     final db = await database;
-    final id = await db.insert('mpr', mpr.toMap());
+    
+    // Convert items to JSON string
+    final itemsJson = jsonEncode(
+      mpr.items.map((item) => item.toMap()).toList()
+    );
+    
+    final data = {
+      'nameAndAddress': mpr.nameAndAddress,
+      'districtStateTel': mpr.districtStateTel,
+      'panelCentre': mpr.panelCentre,
+      'centreCode': mpr.centreCode,
+      'returnNo': mpr.returnNo,
+      'familySize': mpr.familySize,
+      'incomeGroup': mpr.incomeGroup,
+      'monthAndYear': mpr.monthAndYear,
+      'occupationOfHead': mpr.occupationOfHead,
+      'items': itemsJson,
+      'latitude': mpr.latitude,
+      'longitude': mpr.longitude,
+      'otpCode': mpr.otpCode,
+      'createdAt': mpr.createdAt.toIso8601String(),
+      'isSynced': mpr.isSynced ? 1 : 0,
+    };
+    
+    final id = await db.insert('mpr', data);
     notifyListeners();
     return id;
   }
@@ -223,10 +325,9 @@ class DatabaseService extends ChangeNotifier {
       
       final count = await db.rawQuery('''
         SELECT COUNT(*) as count FROM mpr 
-        WHERE purchaseDate >= ? AND purchaseDate <= ?
+        WHERE monthAndYear = ?
       ''', [
-        periodStart.toIso8601String(),
-        periodEnd.toIso8601String(),
+        '${periodStart.month}/${periodStart.year}',
       ]);
       
       result.add({
@@ -300,7 +401,6 @@ class DatabaseService extends ChangeNotifier {
 
   // Database statistics
   Future<Map<String, int>> getDatabaseStats() async {
-    final db = await database;
     final dprCount = await getDPRCount();
     final unsyncedDprCount = await getUnsyncedDPRCount();
     final mprCount = await getMPRCount();

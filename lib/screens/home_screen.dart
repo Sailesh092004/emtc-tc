@@ -48,9 +48,13 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
+          : Scrollbar(
+              thumbVisibility: true,
+              trackVisibility: true,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16.0),
+                physics: const BouncingScrollPhysics(),
+                child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Welcome Section
@@ -101,71 +105,71 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-                                                     Row(
-                             children: [
-                               Expanded(
-                                 child: _StatCard(
-                                   title: 'Total DPR',
-                                   value: _stats['totalDPR']?.toString() ?? '0',
-                                   icon: Icons.description,
-                                   color: Colors.blue,
-                                 ),
-                               ),
-                               const SizedBox(width: 12),
-                               Expanded(
-                                 child: _StatCard(
-                                   title: 'Total MPR',
-                                   value: _stats['totalMPR']?.toString() ?? '0',
-                                   icon: Icons.shopping_cart,
-                                   color: Colors.green,
-                                 ),
-                               ),
-                             ],
-                           ),
-                           const SizedBox(height: 12),
-                                                       Row(
-                              children: [
-                                Expanded(
-                                  child: _StatCard(
-                                    title: 'Pending DPR',
-                                    value: _stats['unsyncedDPR']?.toString() ?? '0',
-                                    icon: Icons.cloud_upload,
-                                    color: Colors.orange,
-                                  ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Total DPR',
+                                  value: _stats['totalDPR']?.toString() ?? '0',
+                                  icon: Icons.description,
+                                  color: Colors.blue,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _StatCard(
-                                    title: 'Pending MPR',
-                                    value: _stats['unsyncedMPR']?.toString() ?? '0',
-                                    icon: Icons.cloud_upload,
-                                    color: Colors.purple,
-                                  ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Total MPR',
+                                  value: _stats['totalMPR']?.toString() ?? '0',
+                                  icon: Icons.shopping_cart,
+                                  color: Colors.green,
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _StatCard(
-                                    title: 'Total FP',
-                                    value: _stats['totalFP']?.toString() ?? '0',
-                                    icon: Icons.location_on,
-                                    color: Colors.purple,
-                                  ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Pending DPR',
+                                  value: _stats['unsyncedDPR']?.toString() ?? '0',
+                                  icon: Icons.cloud_upload,
+                                  color: Colors.orange,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: _StatCard(
-                                    title: 'Pending FP',
-                                    value: _stats['unsyncedFP']?.toString() ?? '0',
-                                    icon: Icons.cloud_upload,
-                                    color: Colors.deepPurple,
-                                  ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Pending MPR',
+                                  value: _stats['unsyncedMPR']?.toString() ?? '0',
+                                  icon: Icons.cloud_upload,
+                                  color: Colors.purple,
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Total FP',
+                                  value: _stats['totalFP']?.toString() ?? '0',
+                                  icon: Icons.location_on,
+                                  color: Colors.purple,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: _StatCard(
+                                  title: 'Pending FP',
+                                  value: _stats['unsyncedFP']?.toString() ?? '0',
+                                  icon: Icons.cloud_upload,
+                                  color: Colors.deepPurple,
+                                ),
+                              ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -220,9 +224,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     color: Colors.purple,
                     onTap: () => _navigateToForm(context, 'fp'),
                   ),
-                ],
-              ),
-            ),
+                                     const SizedBox(height: 32), // Extra padding at bottom
+                 ],
+               ),
+             ),
+           ),
     );
   }
 
@@ -257,25 +263,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  void _showComingSoon(BuildContext context, String formName) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('$formName Coming Soon'),
-        content: Text('$formName form will be available in the next update.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showSyncDialog(BuildContext context) {
-    final syncService = Provider.of<SyncService>(context, listen: false);
-    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -429,7 +417,6 @@ class _FormCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final VoidCallback onTap;
-  final bool isComingSoon;
 
   const _FormCard({
     required this.title,
@@ -437,14 +424,13 @@ class _FormCard extends StatelessWidget {
     required this.icon,
     required this.color,
     required this.onTap,
-    this.isComingSoon = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Card(
       child: InkWell(
-        onTap: isComingSoon ? null : onTap,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
@@ -463,37 +449,12 @@ class _FormCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        if (isComingSoon)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.grey,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Text(
-                              'SOON',
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -508,7 +469,7 @@ class _FormCard extends StatelessWidget {
               ),
               Icon(
                 Icons.arrow_forward_ios,
-                color: isComingSoon ? Colors.grey : color,
+                color: color,
                 size: 16,
               ),
             ],

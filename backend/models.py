@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 # Base models for common fields
@@ -10,21 +10,55 @@ class LocationBase(BaseModel):
 class TimestampBase(BaseModel):
     created_at: Optional[datetime] = Field(default_factory=datetime.now, description="Record creation timestamp")
 
-# DPR (Demographic Purchase Return) Schema
+# Household Member Schema for DPR
+class HouseholdMember(BaseModel):
+    name: str = Field(..., description="Name of household member")
+    relationship_with_head: str = Field(..., description="Relationship with head of household")
+    gender: str = Field(..., description="Gender (M/F/Other)")
+    age: int = Field(..., ge=0, le=120, description="Age of member")
+    education: str = Field(..., description="Education level")
+    occupation: str = Field(..., description="Occupation")
+    annual_income_job: float = Field(..., ge=0, description="Annual income from job")
+    annual_income_other: float = Field(..., ge=0, description="Annual income from other sources")
+    other_income_source: str = Field(..., description="Source of other income")
+    total_income: float = Field(..., ge=0, description="Total annual income")
+
+# Purchase Item Schema for MPR
+class PurchaseItem(BaseModel):
+    item_name: str = Field(..., description="Name of the item")
+    item_code: str = Field(..., description="Item code")
+    month_of_purchase: str = Field(..., description="Month of purchase")
+    fibre_code: str = Field(..., description="Fibre code")
+    sector_of_manufacture_code: str = Field(..., description="Sector of manufacture code")
+    colour_design_code: str = Field(..., description="Colour/Design code")
+    person_age_gender: str = Field(..., description="Person age and gender")
+    type_of_shop_code: str = Field(..., description="Type of shop code")
+    purchase_type_code: str = Field(..., description="Purchase type code")
+    dress_intended_code: str = Field(..., description="Dress intended code")
+    length_in_meters: float = Field(..., gt=0, description="Length in meters")
+    price_per_meter: float = Field(..., gt=0, description="Price per meter")
+    total_amount_paid: float = Field(..., gt=0, description="Total amount paid")
+    brand_mill_name: str = Field(..., description="Brand/Mill name")
+    is_imported: bool = Field(..., description="Whether item is imported")
+
+# DPR (Demographic Particulars Return) Schema
 class DPRBase(BaseModel):
-    household_id: str = Field(..., description="Unique household identifier")
-    respondent_name: str = Field(..., description="Name of the respondent")
-    age: int = Field(..., ge=0, le=120, description="Age of the respondent")
-    gender: str = Field(..., description="Gender of the respondent")
-    education: str = Field(..., description="Education level of the respondent")
-    occupation: str = Field(..., description="Occupation of the respondent")
-    income_level: str = Field(..., description="Income level category")
+    name_and_address: str = Field(..., description="Name and address")
+    district: str = Field(..., description="District")
+    state: str = Field(..., description="State")
+    family_size: int = Field(..., gt=0, description="Family size")
+    income_group: str = Field(..., description="Income group")
+    centre_code: str = Field(..., description="Centre code")
+    return_no: str = Field(..., description="Return number")
+    month_and_year: str = Field(..., description="Month and year")
+    household_members: List[HouseholdMember] = Field(..., max_items=8, description="Household members (max 8)")
 
 class DPRCreate(DPRBase, LocationBase):
-    pass
+    otp_code: str = Field(..., description="OTP code for verification")
 
 class DPRResponse(DPRBase, LocationBase, TimestampBase):
     id: int
+    otp_code: str
     is_synced: bool = False
 
     class Config:
@@ -32,18 +66,23 @@ class DPRResponse(DPRBase, LocationBase, TimestampBase):
 
 # MPR (Monthly Purchase Return) Schema
 class MPRBase(BaseModel):
-    household_id: str = Field(..., description="Unique household identifier")
-    purchase_date: str = Field(..., description="Date of purchase (YYYY-MM-DD)")
-    textile_type: str = Field(..., description="Type of textile purchased")
-    quantity: int = Field(..., gt=0, description="Quantity purchased")
-    price: float = Field(..., gt=0, description="Price per unit")
-    purchase_location: str = Field(..., description="Location where purchase was made")
+    name_and_address: str = Field(..., description="Name and address")
+    district_state_tel: str = Field(..., description="District, State, Tel No.")
+    panel_centre: str = Field(..., description="Panel centre")
+    centre_code: str = Field(..., description="Centre code")
+    return_no: str = Field(..., description="Return number")
+    family_size: int = Field(..., gt=0, description="Family size")
+    income_group: str = Field(..., description="Income group")
+    month_and_year: str = Field(..., description="Month and year")
+    occupation_of_head: str = Field(..., description="Occupation of head of family")
+    items: List[PurchaseItem] = Field(..., max_items=10, description="Purchase items (max 10)")
 
 class MPRCreate(MPRBase, LocationBase):
-    pass
+    otp_code: str = Field(..., description="OTP code for verification")
 
 class MPRResponse(MPRBase, LocationBase, TimestampBase):
     id: int
+    otp_code: str
     is_synced: bool = False
 
     class Config:

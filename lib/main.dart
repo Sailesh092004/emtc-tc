@@ -7,9 +7,8 @@ import 'services/sync_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize database
+  // Initialize database service
   final dbService = DatabaseService();
-  await dbService.initDatabase();
   
   // Initialize sync service
   final syncService = SyncService(dbService);

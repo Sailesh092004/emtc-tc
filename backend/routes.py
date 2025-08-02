@@ -32,7 +32,7 @@ async def create_dpr_endpoint(
     try:
         # Log the submission
         client_ip = request.client.host if request.client else "unknown"
-        logger.info(f"DPR submission received from {client_ip} - Household: {dpr_data.household_id}")
+        logger.info(f"DPR submission received from {client_ip} - Return No: {dpr_data.return_no}")
         
         # Create the DPR record
         db_dpr = create_dpr(db, dpr_data)
@@ -41,7 +41,7 @@ async def create_dpr_endpoint(
             message="DPR record created successfully",
             data={
                 "id": db_dpr.id,
-                "household_id": db_dpr.household_id,
+                "return_no": db_dpr.return_no,
                 "created_at": db_dpr.created_at.isoformat()
             }
         )
@@ -62,7 +62,7 @@ async def create_mpr_endpoint(
     try:
         # Log the submission
         client_ip = request.client.host if request.client else "unknown"
-        logger.info(f"MPR submission received from {client_ip} - Household: {mpr_data.household_id}")
+        logger.info(f"MPR submission received from {client_ip} - Return No: {mpr_data.return_no}")
         
         # Create the MPR record
         db_mpr = create_mpr(db, mpr_data)
@@ -71,7 +71,7 @@ async def create_mpr_endpoint(
             message="MPR record created successfully",
             data={
                 "id": db_mpr.id,
-                "household_id": db_mpr.household_id,
+                "return_no": db_mpr.return_no,
                 "created_at": db_mpr.created_at.isoformat()
             }
         )

@@ -168,9 +168,12 @@ class _FPFormScreenState extends State<FPFormScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Form(
               key: _formKey,
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
+              child: Scrollbar(
+                thumbVisibility: true,
+                trackVisibility: true,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Location Status Card
@@ -435,6 +438,7 @@ class _FPFormScreenState extends State<FPFormScreen> {
                 ),
               ),
             ),
+          ),
     );
   }
 } 

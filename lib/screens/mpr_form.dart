@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:location/location.dart';
 import '../models/mpr.dart';
 import '../services/db_service.dart';
+import '../services/api_service.dart';
 
 class MPRFormScreen extends StatefulWidget {
   const MPRFormScreen({super.key});
@@ -14,13 +15,20 @@ class MPRFormScreen extends StatefulWidget {
 class _MPRFormScreenState extends State<MPRFormScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Form controllers
-  final _householdIdController = TextEditingController();
-  final _purchaseDateController = TextEditingController();
-  final _textileTypeController = TextEditingController();
-  final _quantityController = TextEditingController();
-  final _priceController = TextEditingController();
-  final _purchaseLocationController = TextEditingController();
+  // Header Form Controllers
+  final _nameAndAddressController = TextEditingController();
+  final _districtStateTelController = TextEditingController();
+  final _panelCentreController = TextEditingController();
+  final _centreCodeController = TextEditingController();
+  final _returnNoController = TextEditingController();
+  final _familySizeController = TextEditingController();
+  final _incomeGroupController = TextEditingController();
+  final _monthAndYearController = TextEditingController();
+  final _occupationOfHeadController = TextEditingController();
+  final _otpController = TextEditingController();
+
+  // Purchase Items (up to 10)
+  final List<PurchaseItemForm> _purchaseItems = [];
 
   // Location data
   double _latitude = 0.0;
@@ -29,23 +37,38 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
 
   // Form state
   bool _isSubmitting = false;
-  DateTime? _selectedDate;
+  bool _isOtpVerified = false;
+  final ApiService _apiService = ApiService();
+  bool _isOtpLoading = false;
+
+  // Dropdown options
+  final List<String> _fibreCodes = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
+  final List<String> _sectorCodes = ['01', '02', '03', '04', '05'];
+  final List<String> _colourCodes = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
+  final List<String> _shopTypeCodes = ['01', '02', '03', '04', '05'];
+  final List<String> _purchaseTypeCodes = ['01', '02', '03', '04'];
+  final List<String> _dressIntendedCodes = ['01', '02', '03', '04', '05', '06'];
 
   @override
   void initState() {
     super.initState();
     _getCurrentLocation();
-    _purchaseDateController.text = DateTime.now().toString().split(' ')[0]; // Set today's date
+    _monthAndYearController.text = '${DateTime.now().month}/${DateTime.now().year}';
+    _addPurchaseItem(); // Add first item by default
   }
 
   @override
   void dispose() {
-    _householdIdController.dispose();
-    _purchaseDateController.dispose();
-    _textileTypeController.dispose();
-    _quantityController.dispose();
-    _priceController.dispose();
-    _purchaseLocationController.dispose();
+    _nameAndAddressController.dispose();
+    _districtStateTelController.dispose();
+    _panelCentreController.dispose();
+    _centreCodeController.dispose();
+    _returnNoController.dispose();
+    _familySizeController.dispose();
+    _incomeGroupController.dispose();
+    _monthAndYearController.dispose();
+    _occupationOfHeadController.dispose();
+    _otpController.dispose();
     super.dispose();
   }
 
@@ -57,7 +80,6 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     try {
       Location location = Location();
       
-      // Check if location service is enabled
       bool serviceEnabled = await location.serviceEnabled();
       if (!serviceEnabled) {
         serviceEnabled = await location.requestService();
@@ -67,7 +89,6 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         }
       }
 
-      // Check location permission
       PermissionStatus permissionGranted = await location.hasPermission();
       if (permissionGranted == PermissionStatus.denied) {
         permissionGranted = await location.requestPermission();
@@ -77,7 +98,6 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         }
       }
 
-      // Get current location
       LocationData currentLocation = await location.getLocation();
       
       setState(() {
@@ -85,10 +105,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         _longitude = currentLocation.longitude ?? 0.0;
         _isLocationLoading = false;
       });
-
-      print('Location captured: $_latitude, $_longitude');
     } catch (e) {
-      print('Error getting location: $e');
       _showLocationError('Failed to get location: $e');
     }
   }
@@ -99,30 +116,89 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
   }
 
-  Future<void> _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-    );
-    if (picked != null && picked != _selectedDate) {
-      setState(() {
-        _selectedDate = picked;
-        _purchaseDateController.text = picked.toString().split(' ')[0];
-      });
+  Future<void> _verifyOTP() async {
+    if (_otpController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter OTP'), backgroundColor: Colors.red),
+      );
+      return;
     }
+
+    setState(() {
+      _isOtpLoading = true;
+    });
+
+    try {
+      final isValid = await _apiService.verifyOTP('', _otpController.text);
+      setState(() {
+        _isOtpVerified = isValid;
+        _isOtpLoading = false;
+      });
+
+      if (isValid) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('OTP verified successfully'), backgroundColor: Colors.green),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Invalid OTP. Please try again.'), backgroundColor: Colors.red),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isOtpLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error verifying OTP: $e'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  void _addPurchaseItem() {
+    if (_purchaseItems.length < 10) {
+      setState(() {
+        _purchaseItems.add(PurchaseItemForm());
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Maximum 10 purchase items allowed'), backgroundColor: Colors.orange),
+      );
+    }
+  }
+
+  void _removePurchaseItem(int index) {
+    setState(() {
+      _purchaseItems.removeAt(index);
+    });
+  }
+
+  void _calculateTotalAmount(PurchaseItemForm item) {
+    final length = double.tryParse(item.lengthInMetersController.text) ?? 0.0;
+    final pricePerMeter = double.tryParse(item.pricePerMeterController.text) ?? 0.0;
+    final total = length * pricePerMeter;
+    item.totalAmountController.text = total.toStringAsFixed(2);
   }
 
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (!_isOtpVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please verify OTP before submitting'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    if (_purchaseItems.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add at least one purchase item'), backgroundColor: Colors.red),
+      );
       return;
     }
 
@@ -131,15 +207,39 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     });
 
     try {
+      // Convert form data to PurchaseItem objects
+      final items = _purchaseItems.map((form) => PurchaseItem(
+        itemName: form.itemNameController.text,
+        itemCode: form.itemCodeController.text,
+        monthOfPurchase: form.monthOfPurchaseController.text,
+        fibreCode: form.fibreCodeController.text,
+        sectorOfManufactureCode: form.sectorCodeController.text,
+        colourDesignCode: form.colourCodeController.text,
+        personAgeGender: form.personAgeGenderController.text,
+        typeOfShopCode: form.shopTypeCodeController.text,
+        purchaseTypeCode: form.purchaseTypeCodeController.text,
+        dressIntendedCode: form.dressIntendedCodeController.text,
+        lengthInMeters: double.parse(form.lengthInMetersController.text),
+        pricePerMeter: double.parse(form.pricePerMeterController.text),
+        totalAmountPaid: double.parse(form.totalAmountController.text),
+        brandMillName: form.brandMillNameController.text,
+        isImported: form.isImportedController.text == 'Y',
+      )).toList();
+
       final mpr = MPR(
-        householdId: _householdIdController.text,
-        purchaseDate: _selectedDate ?? DateTime.now(),
-        textileType: _textileTypeController.text,
-        quantity: int.parse(_quantityController.text),
-        price: double.parse(_priceController.text),
-        purchaseLocation: _purchaseLocationController.text,
+        nameAndAddress: _nameAndAddressController.text,
+        districtStateTel: _districtStateTelController.text,
+        panelCentre: _panelCentreController.text,
+        centreCode: _centreCodeController.text,
+        returnNo: _returnNoController.text,
+        familySize: int.parse(_familySizeController.text),
+        incomeGroup: _incomeGroupController.text,
+        monthAndYear: _monthAndYearController.text,
+        occupationOfHead: _occupationOfHeadController.text,
+        items: items,
         latitude: _latitude,
         longitude: _longitude,
+        otpCode: _otpController.text,
         createdAt: DateTime.now(),
       );
 
@@ -151,30 +251,24 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('MPR form submitted successfully! ID: $id'),
-          backgroundColor: Colors.green,
-        ),
+        SnackBar(content: Text('MPR form submitted successfully! ID: $id'), backgroundColor: Colors.green),
       );
 
       // Clear form
       _formKey.currentState!.reset();
       setState(() {
-        _selectedDate = null;
-        _purchaseDateController.text = DateTime.now().toString().split(' ')[0];
+        _purchaseItems.clear();
+        _addPurchaseItem();
+        _isOtpVerified = false;
       });
 
-      // Navigate back
       Navigator.pop(context);
     } catch (e) {
       setState(() {
         _isSubmitting = false;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error submitting form: $e'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text('Error submitting form: $e'), backgroundColor: Colors.red),
       );
     }
   }
@@ -183,7 +277,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('MPR Form'),
+        title: const Text('MPR Form - Monthly Purchase Return'),
         actions: [
           IconButton(
             icon: const Icon(Icons.location_on),
@@ -194,13 +288,55 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
       ),
       body: Form(
         key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
+        child: Scrollbar(
+          thumbVisibility: true,
+          trackVisibility: true,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Location Status
-              Card(
+              _buildLocationCard(),
+              const SizedBox(height: 16),
+
+              // Header Information
+              _buildHeaderSection(),
+              const SizedBox(height: 24),
+
+              // Purchase Items Section
+              _buildPurchaseItemsSection(),
+              const SizedBox(height: 24),
+
+              // OTP Verification
+              _buildOTPSection(),
+              const SizedBox(height: 32),
+
+              // Submit Button
+              ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitForm,
+                style: ElevatedButton.styleFrom(padding: const EdgeInsets.all(16)),
+                child: _isSubmitting
+                    ? const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                          SizedBox(width: 16),
+                          Text('Submitting...'),
+                        ],
+                      )
+                    : const Text('Submit MPR Form'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+    );
+  }
+
+  Widget _buildLocationCard() {
+    return Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
@@ -227,66 +363,359 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 16),
+    );
+  }
 
-              // Purchase Information
+  Widget _buildHeaderSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
               const Text(
-                'Purchase Information',
+              'Header Information',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 16),
 
               TextFormField(
-                controller: _householdIdController,
+              controller: _nameAndAddressController,
                 decoration: const InputDecoration(
-                  labelText: 'Household ID *',
+                labelText: 'Name & Address *',
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter household ID';
-                  }
-                  return null;
-                },
+              maxLines: 3,
+              validator: (value) => value?.isEmpty == true ? 'Required' : null,
+            ),
+            const SizedBox(height: 16),
+
+            TextFormField(
+              controller: _districtStateTelController,
+              decoration: const InputDecoration(
+                labelText: 'District, State, Tel No. *',
+                border: OutlineInputBorder(),
+              ),
+              validator: (value) => value?.isEmpty == true ? 'Required' : null,
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _panelCentreController,
+                    decoration: const InputDecoration(
+                      labelText: 'Panel Centre *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _centreCodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Centre Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
               ),
               const SizedBox(height: 16),
 
-              // Date Picker
-              GestureDetector(
-                onTap: () => _selectDate(context),
-                child: AbsorbPointer(
+            Row(
+              children: [
+                Expanded(
                   child: TextFormField(
-                    controller: _purchaseDateController,
+                    controller: _returnNoController,
                     decoration: const InputDecoration(
-                      labelText: 'Purchase Date *',
+                      labelText: 'Return No. *',
                       border: OutlineInputBorder(),
-                      suffixIcon: Icon(Icons.calendar_today),
                     ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _familySizeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Family Size *',
+                      border: OutlineInputBorder(),
+                    ),
+                    keyboardType: TextInputType.number,
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please select purchase date';
-                      }
+                      if (value?.isEmpty == true) return 'Required';
+                      if (int.tryParse(value!) == null) return 'Invalid number';
                       return null;
                     },
                   ),
                 ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _incomeGroupController,
+                    decoration: const InputDecoration(
+                      labelText: 'Income Group *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: _monthAndYearController,
+                    decoration: const InputDecoration(
+                      labelText: 'Month & Year *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
               ),
               const SizedBox(height: 16),
 
               TextFormField(
-                controller: _textileTypeController,
+              controller: _occupationOfHeadController,
                 decoration: const InputDecoration(
-                  labelText: 'Type of Textiles Purchased *',
+                labelText: 'Occupation of Head of Family *',
                   border: OutlineInputBorder(),
-                  hintText: 'e.g., Cotton, Silk, Wool, Synthetic',
+              ),
+              validator: (value) => value?.isEmpty == true ? 'Required' : null,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPurchaseItemsSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Purchase Items (Max 10)',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter textile type';
-                  }
-                  return null;
-                },
+                ElevatedButton.icon(
+                  onPressed: _addPurchaseItem,
+                  icon: const Icon(Icons.add),
+                  label: const Text('Add Item'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            ..._purchaseItems.asMap().entries.map((entry) {
+              final index = entry.key;
+              final item = entry.value;
+              return _buildPurchaseItemForm(index, item);
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPurchaseItemForm(int index, PurchaseItemForm item) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Item ${index + 1}',
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                if (_purchaseItems.length > 1)
+                  IconButton(
+                    onPressed: () => _removePurchaseItem(index),
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    tooltip: 'Remove Item',
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: item.itemNameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Item Name *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: item.itemCodeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Item Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: item.monthOfPurchaseController,
+                    decoration: const InputDecoration(
+                      labelText: 'Month of Purchase *',
+                      border: OutlineInputBorder(),
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: item.fibreCodeController.text.isEmpty ? null : item.fibreCodeController.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Fibre Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _fibreCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    onChanged: (value) {
+                      item.fibreCodeController.text = value ?? '';
+                    },
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: item.sectorCodeController.text.isEmpty ? null : item.sectorCodeController.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Sector of Manufacture Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _sectorCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    onChanged: (value) {
+                      item.sectorCodeController.text = value ?? '';
+                    },
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: item.colourCodeController.text.isEmpty ? null : item.colourCodeController.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Colour/Design Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _colourCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    onChanged: (value) {
+                      item.colourCodeController.text = value ?? '';
+                    },
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: item.personAgeGenderController,
+                    decoration: const InputDecoration(
+                      labelText: 'Person Age & Gender *',
+                      border: OutlineInputBorder(),
+                      hintText: 'e.g., 25M, 30F',
+                    ),
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: item.shopTypeCodeController.text.isEmpty ? null : item.shopTypeCodeController.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Type of Shop Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _shopTypeCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    onChanged: (value) {
+                      item.shopTypeCodeController.text = value ?? '';
+                    },
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: item.purchaseTypeCodeController.text.isEmpty ? null : item.purchaseTypeCodeController.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Purchase Type Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _purchaseTypeCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    onChanged: (value) {
+                      item.purchaseTypeCodeController.text = value ?? '';
+                    },
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: item.dressIntendedCodeController.text.isEmpty ? null : item.dressIntendedCodeController.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Dress Intended Code *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _dressIntendedCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    onChanged: (value) {
+                      item.dressIntendedCodeController.text = value ?? '';
+                    },
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
               ),
               const SizedBox(height: 16),
 
@@ -294,20 +723,16 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                 children: [
                   Expanded(
                     child: TextFormField(
-                      controller: _quantityController,
+                    controller: item.lengthInMetersController,
                       decoration: const InputDecoration(
-                        labelText: 'Quantity *',
+                      labelText: 'Length in Meters *',
                         border: OutlineInputBorder(),
-                        hintText: 'Number of items',
                       ),
                       keyboardType: TextInputType.number,
+                    onChanged: (value) => _calculateTotalAmount(item),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter quantity';
-                        }
-                        if (int.tryParse(value) == null) {
-                          return 'Please enter a valid number';
-                        }
+                      if (value?.isEmpty == true) return 'Required';
+                      if (double.tryParse(value!) == null) return 'Invalid number';
                         return null;
                       },
                     ),
@@ -315,20 +740,16 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                   const SizedBox(width: 16),
                   Expanded(
                     child: TextFormField(
-                      controller: _priceController,
+                    controller: item.pricePerMeterController,
                       decoration: const InputDecoration(
-                        labelText: 'Price (₹) *',
+                      labelText: 'Price per Meter *',
                         border: OutlineInputBorder(),
-                        hintText: 'Total amount',
                       ),
                       keyboardType: TextInputType.number,
+                    onChanged: (value) => _calculateTotalAmount(item),
                       validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Please enter price';
-                        }
-                        if (double.tryParse(value) == null) {
-                          return 'Please enter a valid amount';
-                        }
+                      if (value?.isEmpty == true) return 'Required';
+                      if (double.tryParse(value!) == null) return 'Invalid amount';
                         return null;
                       },
                     ),
@@ -337,47 +758,141 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _purchaseLocationController,
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: item.totalAmountController,
                 decoration: const InputDecoration(
-                  labelText: 'Purchase Location *',
+                      labelText: 'Total Amount Paid *',
                   border: OutlineInputBorder(),
-                  hintText: 'e.g., Local Market, Shopping Mall, Online',
+                    ),
+                    keyboardType: TextInputType.number,
+                    readOnly: true,
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
                 ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter purchase location';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 32),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    value: item.isImportedController.text.isEmpty ? null : item.isImportedController.text,
+                    decoration: const InputDecoration(
+                      labelText: 'Imported (Y/N) *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: const [
+                      DropdownMenuItem(value: 'Y', child: Text('Yes')),
+                      DropdownMenuItem(value: 'N', child: Text('No')),
+                    ],
+                    onChanged: (value) {
+                      item.isImportedController.text = value ?? '';
+                    },
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
 
-              // Submit Button
-              ElevatedButton(
-                onPressed: _isSubmitting ? null : _submitForm,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.all(16),
-                ),
-                child: _isSubmitting
-                    ? const Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                          SizedBox(width: 16),
-                          Text('Submitting...'),
-                        ],
-                      )
-                    : const Text('Submit MPR Form'),
+            TextFormField(
+              controller: item.brandMillNameController,
+              decoration: const InputDecoration(
+                labelText: 'Brand/Mill Name *',
+                border: OutlineInputBorder(),
               ),
-            ],
-          ),
+              validator: (value) => value?.isEmpty == true ? 'Required' : null,
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  Widget _buildOTPSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'OTP Verification',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _otpController,
+                    decoration: const InputDecoration(
+                      labelText: 'OTP *',
+                      border: OutlineInputBorder(),
+                      hintText: 'Enter 123456 for testing',
+                    ),
+                    keyboardType: TextInputType.number,
+                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                  ),
+                ),
+                const SizedBox(width: 16),
+              ElevatedButton(
+                  onPressed: _isOtpLoading ? null : _verifyOTP,
+                  child: _isOtpLoading
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : const Text('Verify'),
+                ),
+              ],
+            ),
+            if (_isOtpVerified) ...[
+              const SizedBox(height: 8),
+              Row(
+                        children: [
+                  const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                  const SizedBox(width: 8),
+                  Text('OTP verified successfully', style: TextStyle(color: Colors.green[700])),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class PurchaseItemForm {
+  final TextEditingController itemNameController = TextEditingController();
+  final TextEditingController itemCodeController = TextEditingController();
+  final TextEditingController monthOfPurchaseController = TextEditingController();
+  final TextEditingController fibreCodeController = TextEditingController();
+  final TextEditingController sectorCodeController = TextEditingController();
+  final TextEditingController colourCodeController = TextEditingController();
+  final TextEditingController personAgeGenderController = TextEditingController();
+  final TextEditingController shopTypeCodeController = TextEditingController();
+  final TextEditingController purchaseTypeCodeController = TextEditingController();
+  final TextEditingController dressIntendedCodeController = TextEditingController();
+  final TextEditingController lengthInMetersController = TextEditingController();
+  final TextEditingController pricePerMeterController = TextEditingController();
+  final TextEditingController totalAmountController = TextEditingController();
+  final TextEditingController brandMillNameController = TextEditingController();
+  final TextEditingController isImportedController = TextEditingController();
+
+  void dispose() {
+    itemNameController.dispose();
+    itemCodeController.dispose();
+    monthOfPurchaseController.dispose();
+    fibreCodeController.dispose();
+    sectorCodeController.dispose();
+    colourCodeController.dispose();
+    personAgeGenderController.dispose();
+    shopTypeCodeController.dispose();
+    purchaseTypeCodeController.dispose();
+    dressIntendedCodeController.dispose();
+    lengthInMetersController.dispose();
+    pricePerMeterController.dispose();
+    totalAmountController.dispose();
+    brandMillNameController.dispose();
+    isImportedController.dispose();
   }
 } 
