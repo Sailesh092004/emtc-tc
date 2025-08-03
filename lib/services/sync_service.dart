@@ -121,36 +121,124 @@ class SyncService extends ChangeNotifier {
       // Sync DPR records
       bool dprSuccess = true;
       if (unsyncedDPR.isNotEmpty) {
-        final dprSyncResult = await _apiService.syncMultipleDPR(unsyncedDPR);
-        if (dprSyncResult['success']) {
-          // Mark all synced DPR records as synced
-          for (DPR dpr in unsyncedDPR) {
-            if (dpr.id != null) {
-              await _dbService.updateDPRSyncStatus(dpr.id!, true);
+        // Separate new records from updated records
+        List<DPR> newDPR = [];
+        List<DPR> updatedDPR = [];
+        
+        for (DPR dpr in unsyncedDPR) {
+          // If the record has a backend ID, it's an update; otherwise it's new
+          if (dpr.backendId != null) {
+            updatedDPR.add(dpr);
+          } else {
+            newDPR.add(dpr);
+          }
+        }
+        
+        // Sync new DPR records
+        if (newDPR.isNotEmpty) {
+          final dprSyncResult = await _apiService.syncMultipleDPR(newDPR);
+          if (dprSyncResult['success']) {
+            // Mark all synced DPR records as synced
+            for (DPR dpr in newDPR) {
+              if (dpr.id != null) {
+                await _dbService.updateDPRSyncStatus(dpr.id!, true);
+              }
+            }
+            print('Successfully synced ${dprSyncResult['synced']} new DPR records');
+          } else {
+            dprSuccess = false;
+            print('New DPR sync failed: ${dprSyncResult['failed']} records failed');
+          }
+        }
+        
+        // Update existing DPR records
+        if (updatedDPR.isNotEmpty) {
+          int updatedCount = 0;
+          int failedCount = 0;
+          
+          for (DPR dpr in updatedDPR) {
+            try {
+              final success = await _apiService.updateDPR(dpr);
+              if (success) {
+                await _dbService.updateDPRSyncStatus(dpr.id!, true);
+                updatedCount++;
+              } else {
+                failedCount++;
+              }
+            } catch (e) {
+              print('Error updating DPR ${dpr.returnNo}: $e');
+              failedCount++;
             }
           }
-          print('Successfully synced ${dprSyncResult['synced']} DPR records');
-        } else {
-          dprSuccess = false;
-          print('DPR sync failed: ${dprSyncResult['failed']} records failed');
+          
+          if (failedCount == 0) {
+            print('Successfully updated $updatedCount DPR records');
+          } else {
+            dprSuccess = false;
+            print('DPR update failed: $failedCount records failed');
+          }
         }
       }
 
       // Sync MPR records
       bool mprSuccess = true;
       if (unsyncedMPR.isNotEmpty) {
-        final mprSyncResult = await _apiService.syncMultipleMPR(unsyncedMPR);
-        if (mprSyncResult['success']) {
-          // Mark all synced MPR records as synced
-          for (MPR mpr in unsyncedMPR) {
-            if (mpr.id != null) {
-              await _dbService.updateMPRSyncStatus(mpr.id!, true);
+        // Separate new records from updated records
+        List<MPR> newMPR = [];
+        List<MPR> updatedMPR = [];
+        
+        for (MPR mpr in unsyncedMPR) {
+          // If the record has a backend ID, it's an update; otherwise it's new
+          if (mpr.backendId != null) {
+            updatedMPR.add(mpr);
+          } else {
+            newMPR.add(mpr);
+          }
+        }
+        
+        // Sync new MPR records
+        if (newMPR.isNotEmpty) {
+          final mprSyncResult = await _apiService.syncMultipleMPR(newMPR);
+          if (mprSyncResult['success']) {
+            // Mark all synced MPR records as synced
+            for (MPR mpr in newMPR) {
+              if (mpr.id != null) {
+                await _dbService.updateMPRSyncStatus(mpr.id!, true);
+              }
+            }
+            print('Successfully synced ${mprSyncResult['synced']} new MPR records');
+          } else {
+            mprSuccess = false;
+            print('New MPR sync failed: ${mprSyncResult['failed']} records failed');
+          }
+        }
+        
+        // Update existing MPR records
+        if (updatedMPR.isNotEmpty) {
+          int updatedCount = 0;
+          int failedCount = 0;
+          
+          for (MPR mpr in updatedMPR) {
+            try {
+              final success = await _apiService.updateMPR(mpr);
+              if (success) {
+                await _dbService.updateMPRSyncStatus(mpr.id!, true);
+                updatedCount++;
+              } else {
+                failedCount++;
+              }
+            } catch (e) {
+              print('Error updating MPR ${mpr.returnNo}: $e');
+              failedCount++;
             }
           }
-          print('Successfully synced ${mprSyncResult['synced']} MPR records');
-        } else {
-          mprSuccess = false;
-          print('MPR sync failed: ${mprSyncResult['failed']} records failed');
+          
+          if (failedCount == 0) {
+            print('Successfully updated $updatedCount MPR records');
+          } else {
+            mprSuccess = false;
+            print('MPR update failed: $failedCount records failed');
+          }
         }
       }
 

@@ -4,6 +4,8 @@ import '../services/db_service.dart';
 import '../services/sync_service.dart';
 import 'dpr_form.dart';
 import 'mpr_form.dart';
+import 'dpr_list.dart';
+import 'mpr_list.dart';
 import 'dashboard_screen.dart';
 import 'fp_form.dart';
 
@@ -235,16 +237,10 @@ class _HomeScreenState extends State<HomeScreen> {
   void _navigateToForm(BuildContext context, String formType) {
     switch (formType) {
       case 'dpr':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const DPRFormScreen()),
-        ).then((_) => _loadStats()); // Refresh stats when returning
+        _showDPROptions(context);
         break;
       case 'mpr':
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => const MPRFormScreen()),
-        ).then((_) => _loadStats()); // Refresh stats when returning
+        _showMPROptions(context);
         break;
       case 'dashboard':
         Navigator.push(
@@ -261,6 +257,70 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         break;
     }
+  }
+
+  void _showDPROptions(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('DPR Options'),
+        content: const Text('What would you like to do?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DPRFormScreen()),
+              ).then((_) => _loadStats());
+            },
+            child: const Text('New DPR'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const DPRListScreen()),
+              ).then((_) => _loadStats());
+            },
+            child: const Text('View/Edit DPRs'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showMPROptions(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('MPR Options'),
+        content: const Text('What would you like to do?'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MPRFormScreen()),
+              ).then((_) => _loadStats());
+            },
+            child: const Text('New MPR'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const MPRListScreen()),
+              ).then((_) => _loadStats());
+            },
+            child: const Text('View/Edit MPRs'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSyncDialog(BuildContext context) {

@@ -3,10 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:location/location.dart';
 import '../models/dpr.dart';
 import '../services/db_service.dart';
-import '../services/api_service.dart';
 
 class DPRFormScreen extends StatefulWidget {
-  const DPRFormScreen({super.key});
+  final DPR? editingDPR;
+  
+  const DPRFormScreen({super.key, this.editingDPR});
 
   @override
   State<DPRFormScreen> createState() => _DPRFormScreenState();
@@ -39,7 +40,6 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   bool _isOtpVerified = false;
 
   // OTP verification
-  final ApiService _apiService = ApiService();
   bool _isOtpLoading = false;
 
   @override
@@ -48,6 +48,11 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     _getCurrentLocation();
     _monthAndYearController.text = '${DateTime.now().month}/${DateTime.now().year}';
     _addHouseholdMember(); // Add first member by default
+    
+    // If editing, populate the form with existing data
+    if (widget.editingDPR != null) {
+      _populateFormWithDPR(widget.editingDPR!);
+    }
   }
 
   @override
@@ -205,6 +210,42 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     member.totalIncomeController.text = total.toStringAsFixed(2);
   }
 
+  void _populateFormWithDPR(DPR dpr) {
+    _nameAndAddressController.text = dpr.nameAndAddress;
+    _districtController.text = dpr.district;
+    _stateController.text = dpr.state;
+    _familySizeController.text = dpr.familySize.toString();
+    _incomeGroupController.text = dpr.incomeGroup;
+    _centreCodeController.text = dpr.centreCode;
+    _returnNoController.text = dpr.returnNo;
+    _monthAndYearController.text = dpr.monthAndYear;
+    _otpController.text = dpr.otpCode;
+    _latitude = dpr.latitude;
+    _longitude = dpr.longitude;
+    _isOtpVerified = true; // Assume OTP is already verified for existing records
+    
+    // Clear existing household members and add the ones from DPR
+    for (var member in _householdMembers) {
+      member.dispose();
+    }
+    _householdMembers.clear();
+    
+    for (var member in dpr.householdMembers) {
+      final formMember = HouseholdMemberForm();
+      formMember.nameController.text = member.name;
+      formMember.relationshipController.text = member.relationshipWithHead;
+      formMember.genderController.text = member.gender;
+      formMember.ageController.text = member.age.toString();
+      formMember.educationController.text = member.education;
+      formMember.occupationController.text = member.occupation;
+      formMember.annualIncomeJobController.text = member.annualIncomeJob.toString();
+      formMember.annualIncomeOtherController.text = member.annualIncomeOther.toString();
+      formMember.otherIncomeSourceController.text = member.otherIncomeSource;
+      formMember.totalIncomeController.text = member.totalIncome.toString();
+      _householdMembers.add(formMember);
+    }
+  }
+
   Future<void> _submitForm() async {
     if (!_formKey.currentState!.validate()) {
       return;
@@ -266,18 +307,37 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
       );
 
       final dbService = Provider.of<DatabaseService>(context, listen: false);
-      final id = await dbService.insertDPR(dpr);
+      
+      if (widget.editingDPR != null) {
+        // Update existing DPR
+        final updatedDPR = dpr.copyWith(id: widget.editingDPR!.id);
+        await dbService.updateDPR(updatedDPR);
+        
+        setState(() {
+          _isSubmitting = false;
+        });
 
-      setState(() {
-        _isSubmitting = false;
-      });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('DPR updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // Create new DPR
+        final id = await dbService.insertDPR(dpr);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('DPR form submitted successfully! ID: $id'),
-          backgroundColor: Colors.green,
-        ),
-      );
+        setState(() {
+          _isSubmitting = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('DPR form submitted successfully! ID: $id'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
 
       // Clear form
       _formKey.currentState!.reset();
@@ -816,7 +876,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('DPR Form'),
+        title: Text(widget.editingDPR != null ? 'Edit DPR' : 'DPR Form'),
         actions: [
           IconButton(
             icon: const Icon(Icons.location_on),
@@ -871,7 +931,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
                           Text('Submitting...'),
                         ],
                       )
-                    : const Text('Submit DPR Form'),
+                                         : Text(widget.editingDPR != null ? 'Save Changes' : 'Submit DPR Form'),
               ),
                              const SizedBox(height: 32), // Extra padding at bottom
              ],

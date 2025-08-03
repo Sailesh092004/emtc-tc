@@ -6,7 +6,9 @@ import '../services/db_service.dart';
 import '../services/api_service.dart';
 
 class MPRFormScreen extends StatefulWidget {
-  const MPRFormScreen({super.key});
+  final MPR? editingMPR;
+  
+  const MPRFormScreen({super.key, this.editingMPR});
 
   @override
   State<MPRFormScreen> createState() => _MPRFormScreenState();
@@ -41,6 +43,11 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
   final ApiService _apiService = ApiService();
   bool _isOtpLoading = false;
 
+  // Auto-fill state
+  bool _isAutoFilled = false;
+  bool _isLoadingDPR = false;
+  String? _dprLoadMessage;
+
   // Dropdown options
   final List<String> _fibreCodes = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
   final List<String> _sectorCodes = ['01', '02', '03', '04', '05'];
@@ -55,6 +62,11 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     _getCurrentLocation();
     _monthAndYearController.text = '${DateTime.now().month}/${DateTime.now().year}';
     _addPurchaseItem(); // Add first item by default
+    
+    // If editing, populate the form with existing data
+    if (widget.editingMPR != null) {
+      _populateFormWithMPR(widget.editingMPR!);
+    }
   }
 
   @override
@@ -244,15 +256,37 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
       );
 
       final dbService = Provider.of<DatabaseService>(context, listen: false);
-      final id = await dbService.insertMPR(mpr);
+      
+      if (widget.editingMPR != null) {
+        // Update existing MPR
+        final updatedMPR = mpr.copyWith(id: widget.editingMPR!.id);
+        await dbService.updateMPR(updatedMPR);
+        
+        setState(() {
+          _isSubmitting = false;
+        });
 
-      setState(() {
-        _isSubmitting = false;
-      });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('MPR updated successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else {
+        // Create new MPR
+        final id = await dbService.insertMPR(mpr);
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('MPR form submitted successfully! ID: $id'), backgroundColor: Colors.green),
-      );
+        setState(() {
+          _isSubmitting = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('MPR form submitted successfully! ID: $id'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
 
       // Clear form
       _formKey.currentState!.reset();
@@ -260,6 +294,8 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         _purchaseItems.clear();
         _addPurchaseItem();
         _isOtpVerified = false;
+        _isAutoFilled = false;
+        _dprLoadMessage = null;
       });
 
       Navigator.pop(context);
@@ -273,11 +309,137 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     }
   }
 
+  void _populateFormWithMPR(MPR mpr) {
+    _nameAndAddressController.text = mpr.nameAndAddress;
+    _districtStateTelController.text = mpr.districtStateTel;
+    _panelCentreController.text = mpr.panelCentre;
+    _centreCodeController.text = mpr.centreCode;
+    _returnNoController.text = mpr.returnNo;
+    _familySizeController.text = mpr.familySize.toString();
+    _incomeGroupController.text = mpr.incomeGroup;
+    _monthAndYearController.text = mpr.monthAndYear;
+    _occupationOfHeadController.text = mpr.occupationOfHead;
+    _otpController.text = mpr.otpCode;
+    _latitude = mpr.latitude;
+    _longitude = mpr.longitude;
+    _isOtpVerified = true; // Assume OTP is already verified for existing records
+    
+    // Clear existing purchase items and add the ones from MPR
+    for (var item in _purchaseItems) {
+      item.dispose();
+    }
+    _purchaseItems.clear();
+    
+    for (var item in mpr.items) {
+      final formItem = PurchaseItemForm();
+      formItem.itemNameController.text = item.itemName;
+      formItem.itemCodeController.text = item.itemCode;
+      formItem.monthOfPurchaseController.text = item.monthOfPurchase;
+      formItem.fibreCodeController.text = item.fibreCode;
+      formItem.sectorCodeController.text = item.sectorOfManufactureCode;
+      formItem.colourCodeController.text = item.colourDesignCode;
+      formItem.personAgeGenderController.text = item.personAgeGender;
+      formItem.shopTypeCodeController.text = item.typeOfShopCode;
+      formItem.purchaseTypeCodeController.text = item.purchaseTypeCode;
+      formItem.dressIntendedCodeController.text = item.dressIntendedCode;
+      formItem.lengthInMetersController.text = item.lengthInMeters.toString();
+      formItem.pricePerMeterController.text = item.pricePerMeter.toString();
+      formItem.totalAmountController.text = item.totalAmountPaid.toString();
+      formItem.brandMillNameController.text = item.brandMillName;
+      formItem.isImportedController.text = item.isImported ? 'Y' : 'N';
+      _purchaseItems.add(formItem);
+    }
+  }
+
+  // Auto-fill MPR fields from DPR data
+  Future<void> _fetchDprDetailsIfAvailable() async {
+    final centreCode = _centreCodeController.text.trim();
+    final returnNo = _returnNoController.text.trim();
+    
+    // Only proceed if both fields are filled
+    if (centreCode.isEmpty || returnNo.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingDPR = true;
+      _dprLoadMessage = null;
+    });
+
+    try {
+      final dbService = Provider.of<DatabaseService>(context, listen: false);
+      final dpr = await dbService.getDPRByCentreAndReturn(centreCode, returnNo);
+      
+      if (dpr != null) {
+        // Auto-fill the fields
+        _nameAndAddressController.text = dpr.nameAndAddress;
+        _districtStateTelController.text = '${dpr.district}, ${dpr.state}';
+        _familySizeController.text = dpr.familySize.toString();
+        _incomeGroupController.text = dpr.incomeGroup;
+        
+        // Find occupation from household members (head of family)
+        String occupation = '';
+        if (dpr.householdMembers.isNotEmpty) {
+          // Assume first member is head of family, or find by relationship
+          final headMember = dpr.householdMembers.firstWhere(
+            (member) => member.relationshipWithHead.toLowerCase().contains('head') ||
+                       member.relationshipWithHead.toLowerCase().contains('self'),
+            orElse: () => dpr.householdMembers.first,
+          );
+          occupation = headMember.occupation;
+        }
+        _occupationOfHeadController.text = occupation;
+        
+        setState(() {
+          _isAutoFilled = true;
+          _dprLoadMessage = '✔ DPR data loaded for Return No: $returnNo';
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('DPR data auto-filled successfully!'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      } else {
+        setState(() {
+          _isAutoFilled = false;
+          _dprLoadMessage = '⚠ No DPR found for Centre Code: $centreCode, Return No: $returnNo';
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('No DPR record found for the entered Centre Code and Return Number'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _dprLoadMessage = '❌ Error loading DPR data: $e';
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading DPR data: $e'),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } finally {
+      setState(() {
+        _isLoadingDPR = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('MPR Form - Monthly Purchase Return'),
+        title: Text(widget.editingMPR != null ? 'Edit MPR' : 'MPR Form - Monthly Purchase Return'),
         actions: [
           IconButton(
             icon: const Icon(Icons.location_on),
@@ -302,6 +464,34 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
 
               // Header Information
               _buildHeaderSection(),
+              const SizedBox(height: 16),
+              
+              // DPR Auto-fill Status
+              if (_dprLoadMessage != null)
+                Card(
+                  color: _isAutoFilled ? Colors.green.shade50 : Colors.orange.shade50,
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _isAutoFilled ? Icons.check_circle : Icons.warning,
+                          color: _isAutoFilled ? Colors.green : Colors.orange,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _dprLoadMessage!,
+                            style: TextStyle(
+                              color: _isAutoFilled ? Colors.green.shade800 : Colors.orange.shade800,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               const SizedBox(height: 24),
 
               // Purchase Items Section
@@ -325,7 +515,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                           Text('Submitting...'),
                         ],
                       )
-                    : const Text('Submit MPR Form'),
+                    : Text(widget.editingMPR != null ? 'Save Changes' : 'Submit MPR Form'),
               ),
             ],
           ),
@@ -373,30 +563,55 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-              const Text(
-              'Header Information',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Header Information',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  if (_centreCodeController.text.isNotEmpty && _returnNoController.text.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: _isLoadingDPR ? null : _fetchDprDetailsIfAvailable,
+                      icon: _isLoadingDPR 
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Icon(Icons.refresh, size: 16),
+                      label: Text(_isLoadingDPR ? 'Loading...' : 'Load DPR Data'),
+                    ),
+                ],
               ),
               const SizedBox(height: 16),
 
               TextFormField(
-              controller: _nameAndAddressController,
-                decoration: const InputDecoration(
-                labelText: 'Name & Address *',
-                  border: OutlineInputBorder(),
+                controller: _nameAndAddressController,
+                decoration: InputDecoration(
+                  labelText: 'Name & Address *',
+                  border: const OutlineInputBorder(),
+                  filled: _isAutoFilled,
+                  fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
+                  suffixIcon: _isAutoFilled 
+                    ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
+                    : null,
                 ),
-              maxLines: 3,
-              validator: (value) => value?.isEmpty == true ? 'Required' : null,
-            ),
+                maxLines: 3,
+                validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                readOnly: _isAutoFilled,
+              ),
             const SizedBox(height: 16),
 
             TextFormField(
               controller: _districtStateTelController,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'District, State, Tel No. *',
-                border: OutlineInputBorder(),
+                border: const OutlineInputBorder(),
+                filled: _isAutoFilled,
+                fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
+                suffixIcon: _isAutoFilled 
+                  ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
+                  : null,
               ),
               validator: (value) => value?.isEmpty == true ? 'Required' : null,
+              readOnly: _isAutoFilled,
             ),
             const SizedBox(height: 16),
 
@@ -416,11 +631,31 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _centreCodeController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Centre Code *',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: _isLoadingDPR 
+                        ? const SizedBox(
+                            width: 20, 
+                            height: 20, 
+                            child: Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
                     ),
                     validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    onChanged: (value) {
+                      if (value.isNotEmpty && _returnNoController.text.isNotEmpty) {
+                        _fetchDprDetailsIfAvailable();
+                      }
+                    },
+                    onFieldSubmitted: (value) {
+                      if (value.isNotEmpty && _returnNoController.text.isNotEmpty) {
+                        _fetchDprDetailsIfAvailable();
+                      }
+                    },
                   ),
                 ),
               ],
@@ -432,20 +667,45 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _returnNoController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Return No. *',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: _isLoadingDPR 
+                        ? const SizedBox(
+                            width: 20, 
+                            height: 20, 
+                            child: Padding(
+                              padding: EdgeInsets.all(8.0),
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : null,
                     ),
                     validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    onChanged: (value) {
+                      if (value.isNotEmpty && _centreCodeController.text.isNotEmpty) {
+                        _fetchDprDetailsIfAvailable();
+                      }
+                    },
+                    onFieldSubmitted: (value) {
+                      if (value.isNotEmpty && _centreCodeController.text.isNotEmpty) {
+                        _fetchDprDetailsIfAvailable();
+                      }
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: TextFormField(
                     controller: _familySizeController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Family Size *',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      filled: _isAutoFilled,
+                      fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
+                      suffixIcon: _isAutoFilled 
+                        ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
+                        : null,
                     ),
                     keyboardType: TextInputType.number,
                     validator: (value) {
@@ -453,6 +713,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                       if (int.tryParse(value!) == null) return 'Invalid number';
                       return null;
                     },
+                    readOnly: _isAutoFilled,
                   ),
                 ),
               ],
@@ -464,11 +725,17 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                 Expanded(
                   child: TextFormField(
                     controller: _incomeGroupController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Income Group *',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      filled: _isAutoFilled,
+                      fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
+                      suffixIcon: _isAutoFilled 
+                        ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
+                        : null,
                     ),
                     validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    readOnly: _isAutoFilled,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -487,13 +754,19 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
               const SizedBox(height: 16),
 
               TextFormField(
-              controller: _occupationOfHeadController,
-                decoration: const InputDecoration(
-                labelText: 'Occupation of Head of Family *',
-                  border: OutlineInputBorder(),
+                controller: _occupationOfHeadController,
+                decoration: InputDecoration(
+                  labelText: 'Occupation of Head of Family *',
+                  border: const OutlineInputBorder(),
+                  filled: _isAutoFilled,
+                  fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
+                  suffixIcon: _isAutoFilled 
+                    ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
+                    : null,
+                ),
+                validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                readOnly: _isAutoFilled,
               ),
-              validator: (value) => value?.isEmpty == true ? 'Required' : null,
-            ),
           ],
         ),
       ),

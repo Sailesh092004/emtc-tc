@@ -14,6 +14,43 @@ class ApiService {
     'Accept': 'application/json',
   };
 
+  // Helper to convert household member to backend format
+  Map<String, dynamic> _convertHouseholdMemberToBackendFormat(HouseholdMember member) {
+    return {
+      'name': member.name,
+      'relationship_with_head': member.relationshipWithHead,
+      'gender': member.gender,
+      'age': member.age,
+      'education': member.education,
+      'occupation': member.occupation,
+      'annual_income_job': member.annualIncomeJob,
+      'annual_income_other': member.annualIncomeOther,
+      'other_income_source': member.otherIncomeSource,
+      'total_income': member.totalIncome,
+    };
+  }
+
+  // Helper to convert purchase item to backend format
+  Map<String, dynamic> _convertPurchaseItemToBackendFormat(PurchaseItem item) {
+    return {
+      'item_name': item.itemName,
+      'item_code': item.itemCode,
+      'month_of_purchase': item.monthOfPurchase,
+      'fibre_code': item.fibreCode,
+      'sector_of_manufacture_code': item.sectorOfManufactureCode,
+      'colour_design_code': item.colourDesignCode,
+      'person_age_gender': item.personAgeGender,
+      'type_of_shop_code': item.typeOfShopCode,
+      'purchase_type_code': item.purchaseTypeCode,
+      'dress_intended_code': item.dressIntendedCode,
+      'length_in_meters': item.lengthInMeters,
+      'price_per_meter': item.pricePerMeter,
+      'total_amount_paid': item.totalAmountPaid,
+      'brand_mill_name': item.brandMillName,
+      'is_imported': item.isImported,
+    };
+  }
+
   // Sync DPR data to backend
   Future<bool> syncDPR(DPR dpr) async {
     try {
@@ -29,7 +66,7 @@ class ApiService {
           'centre_code': dpr.centreCode,
           'return_no': dpr.returnNo,
           'month_and_year': dpr.monthAndYear,
-          'household_members': dpr.householdMembers.map((member) => member.toMap()).toList(),
+          'household_members': dpr.householdMembers.map((member) => _convertHouseholdMemberToBackendFormat(member)).toList(),
           'latitude': dpr.latitude,
           'longitude': dpr.longitude,
           'otp_code': dpr.otpCode,
@@ -45,6 +82,41 @@ class ApiService {
       }
     } catch (e) {
       print('Error syncing DPR: $e');
+      return false;
+    }
+  }
+
+  // Update DPR data to backend
+  Future<bool> updateDPR(DPR dpr) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$_baseUrl/dpr/${dpr.id}'),
+        headers: _headers,
+        body: jsonEncode({
+          'name_and_address': dpr.nameAndAddress,
+          'district': dpr.district,
+          'state': dpr.state,
+          'family_size': dpr.familySize,
+          'income_group': dpr.incomeGroup,
+          'centre_code': dpr.centreCode,
+          'return_no': dpr.returnNo,
+          'month_and_year': dpr.monthAndYear,
+          'household_members': dpr.householdMembers.map((member) => _convertHouseholdMemberToBackendFormat(member)).toList(),
+          'latitude': dpr.latitude,
+          'longitude': dpr.longitude,
+          'otp_code': dpr.otpCode,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        print('DPR updated successfully: ${dpr.returnNo}');
+        return true;
+      } else {
+        print('Failed to update DPR: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('Error updating DPR: $e');
       return false;
     }
   }
@@ -136,7 +208,7 @@ class ApiService {
           'income_group': mpr.incomeGroup,
           'month_and_year': mpr.monthAndYear,
           'occupation_of_head': mpr.occupationOfHead,
-          'items': mpr.items.map((item) => item.toMap()).toList(),
+          'items': mpr.items.map((item) => _convertPurchaseItemToBackendFormat(item)).toList(),
           'latitude': mpr.latitude,
           'longitude': mpr.longitude,
           'otp_code': mpr.otpCode,
@@ -152,6 +224,42 @@ class ApiService {
       }
     } catch (e) {
       print('Error syncing MPR: $e');
+      return false;
+    }
+  }
+
+  // Update MPR data to backend
+  Future<bool> updateMPR(MPR mpr) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$_baseUrl/mpr/${mpr.id}'),
+        headers: _headers,
+        body: jsonEncode({
+          'name_and_address': mpr.nameAndAddress,
+          'district_state_tel': mpr.districtStateTel,
+          'panel_centre': mpr.panelCentre,
+          'centre_code': mpr.centreCode,
+          'return_no': mpr.returnNo,
+          'family_size': mpr.familySize,
+          'income_group': mpr.incomeGroup,
+          'month_and_year': mpr.monthAndYear,
+          'occupation_of_head': mpr.occupationOfHead,
+          'items': mpr.items.map((item) => _convertPurchaseItemToBackendFormat(item)).toList(),
+          'latitude': mpr.latitude,
+          'longitude': mpr.longitude,
+          'otp_code': mpr.otpCode,
+        }),
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        print('MPR updated successfully: ${mpr.returnNo}');
+        return true;
+      } else {
+        print('Failed to update MPR: ${response.statusCode} - ${response.body}');
+        return false;
+      }
+    } catch (e) {
+      print('Error updating MPR: $e');
       return false;
     }
   }

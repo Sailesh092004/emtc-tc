@@ -17,6 +17,7 @@ class MPR {
   final String otpCode;
   final DateTime createdAt;
   final bool isSynced;
+  final int? backendId; // ID from backend after first sync
 
   MPR({
     this.id,
@@ -35,6 +36,7 @@ class MPR {
     required this.otpCode,
     required this.createdAt,
     this.isSynced = false,
+    this.backendId,
   });
 
   Map<String, dynamic> toMap() {
@@ -55,6 +57,7 @@ class MPR {
       'otpCode': otpCode,
       'createdAt': createdAt.toIso8601String(),
       'isSynced': isSynced ? 1 : 0,
+      'backendId': backendId,
     };
   }
 
@@ -90,6 +93,7 @@ class MPR {
       otpCode: map['otpCode'],
       createdAt: DateTime.parse(map['createdAt']),
       isSynced: map['isSynced'] == 1,
+      backendId: map['backendId'],
     );
   }
 
@@ -110,6 +114,7 @@ class MPR {
     String? otpCode,
     DateTime? createdAt,
     bool? isSynced,
+    int? backendId,
   }) {
     return MPR(
       id: id ?? this.id,
@@ -128,6 +133,7 @@ class MPR {
       otpCode: otpCode ?? this.otpCode,
       createdAt: createdAt ?? this.createdAt,
       isSynced: isSynced ?? this.isSynced,
+      backendId: backendId ?? this.backendId,
     );
   }
 }

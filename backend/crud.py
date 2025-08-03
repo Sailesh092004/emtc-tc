@@ -64,6 +64,36 @@ def update_dpr_sync_status(db: Session, dpr_id: int, synced: bool = True):
         logger.info(f"DPR sync status updated - ID: {dpr_id}, Synced: {synced}")
     return dpr
 
+def update_dpr(db: Session, dpr_id: int, dpr_data: dict) -> DPR:
+    """Update an existing DPR record in the database"""
+    try:
+        dpr = get_dpr_by_id(db, dpr_id)
+        if not dpr:
+            raise ValueError(f"DPR record with ID {dpr_id} not found")
+        
+        # Convert household members to JSON if provided
+        if 'household_members' in dpr_data:
+            household_members_json = json.dumps([member.dict() for member in dpr_data['household_members']])
+            dpr_data['household_members'] = household_members_json
+        
+        # Update all fields
+        for field, value in dpr_data.items():
+            if hasattr(dpr, field):
+                setattr(dpr, field, value)
+        
+        # Mark as unsynced when updated
+        dpr.is_synced = False
+        
+        db.commit()
+        db.refresh(dpr)
+        
+        logger.info(f"DPR record updated successfully - ID: {dpr_id}, Return No: {dpr_data.get('return_no', 'N/A')}")
+        return dpr
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating DPR record: {str(e)}")
+        raise
+
 # MPR CRUD operations
 def create_mpr(db: Session, mpr_data: MPRCreate) -> MPR:
     """Create a new MPR record in the database"""
@@ -119,6 +149,36 @@ def update_mpr_sync_status(db: Session, mpr_id: int, synced: bool = True):
         db.commit()
         logger.info(f"MPR sync status updated - ID: {mpr_id}, Synced: {synced}")
     return mpr
+
+def update_mpr(db: Session, mpr_id: int, mpr_data: dict) -> MPR:
+    """Update an existing MPR record in the database"""
+    try:
+        mpr = get_mpr_by_id(db, mpr_id)
+        if not mpr:
+            raise ValueError(f"MPR record with ID {mpr_id} not found")
+        
+        # Convert purchase items to JSON if provided
+        if 'items' in mpr_data:
+            items_json = json.dumps([item.dict() for item in mpr_data['items']])
+            mpr_data['items'] = items_json
+        
+        # Update all fields
+        for field, value in mpr_data.items():
+            if hasattr(mpr, field):
+                setattr(mpr, field, value)
+        
+        # Mark as unsynced when updated
+        mpr.is_synced = False
+        
+        db.commit()
+        db.refresh(mpr)
+        
+        logger.info(f"MPR record updated successfully - ID: {mpr_id}, Return No: {mpr_data.get('return_no', 'N/A')}")
+        return mpr
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error updating MPR record: {str(e)}")
+        raise
 
 # FP CRUD operations
 def create_fp(db: Session, fp_data: FPCreate) -> FP:

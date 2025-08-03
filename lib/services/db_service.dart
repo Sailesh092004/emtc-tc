@@ -11,7 +11,7 @@ import '../models/fp.dart';
 class DatabaseService extends ChangeNotifier {
   static Database? _database;
   static const String _databaseName = 'mtc_nanna.db';
-  static const int _databaseVersion = 3; // Increment version for schema changes
+  static const int _databaseVersion = 4; // Increment version for schema changes
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -49,7 +49,8 @@ class DatabaseService extends ChangeNotifier {
         longitude REAL NOT NULL,
         otpCode TEXT NOT NULL,
         createdAt TEXT NOT NULL,
-        isSynced INTEGER NOT NULL DEFAULT 0
+        isSynced INTEGER NOT NULL DEFAULT 0,
+        backendId INTEGER
       )
     ''');
 
@@ -71,7 +72,8 @@ class DatabaseService extends ChangeNotifier {
         longitude REAL NOT NULL,
         otpCode TEXT NOT NULL,
         createdAt TEXT NOT NULL,
-        isSynced INTEGER NOT NULL DEFAULT 0
+        isSynced INTEGER NOT NULL DEFAULT 0,
+        backendId INTEGER
       )
     ''');
 
@@ -95,13 +97,20 @@ class DatabaseService extends ChangeNotifier {
     ''');
   }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+  void _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Version 2: Add isSynced column to all tables
+      await db.execute('ALTER TABLE dpr ADD COLUMN isSynced INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE mpr ADD COLUMN isSynced INTEGER NOT NULL DEFAULT 0');
+      await db.execute('ALTER TABLE fp ADD COLUMN isSynced INTEGER NOT NULL DEFAULT 0');
+    }
+    
     if (oldVersion < 3) {
-      // Drop old tables and recreate with new structure
+      // Version 3: Drop and recreate tables to handle JSON data properly
       await db.execute('DROP TABLE IF EXISTS dpr');
       await db.execute('DROP TABLE IF EXISTS mpr');
+      await db.execute('DROP TABLE IF EXISTS fp');
       
-      // Recreate DPR table with new structure
       await db.execute('''
         CREATE TABLE dpr (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -121,8 +130,7 @@ class DatabaseService extends ChangeNotifier {
           isSynced INTEGER NOT NULL DEFAULT 0
         )
       ''');
-
-      // Recreate MPR table with new structure
+      
       await db.execute('''
         CREATE TABLE mpr (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -143,6 +151,31 @@ class DatabaseService extends ChangeNotifier {
           isSynced INTEGER NOT NULL DEFAULT 0
         )
       ''');
+      
+      await db.execute('''
+        CREATE TABLE fp (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          centreName TEXT NOT NULL,
+          centreCode TEXT NOT NULL,
+          panelSize INTEGER NOT NULL,
+          mprCollected INTEGER NOT NULL,
+          notCollected INTEGER NOT NULL,
+          withPurchaseData INTEGER NOT NULL,
+          nilMPRs INTEGER NOT NULL,
+          nilSerialNos INTEGER NOT NULL,
+          latitude REAL NOT NULL,
+          longitude REAL NOT NULL,
+          createdAt TEXT NOT NULL,
+          isSynced INTEGER NOT NULL DEFAULT 0
+        )
+      ''');
+    }
+    
+    if (oldVersion < 4) {
+      // Version 4: Add backendId column to track backend synchronization
+      await db.execute('ALTER TABLE dpr ADD COLUMN backendId INTEGER');
+      await db.execute('ALTER TABLE mpr ADD COLUMN backendId INTEGER');
+      await db.execute('ALTER TABLE fp ADD COLUMN backendId INTEGER');
     }
   }
 
@@ -169,7 +202,8 @@ class DatabaseService extends ChangeNotifier {
       'longitude': dpr.longitude,
       'otpCode': dpr.otpCode,
       'createdAt': dpr.createdAt.toIso8601String(),
-      'isSynced': dpr.isSynced ? 1 : 0,
+      'isSynced': 0,
+      'backendId': dpr.backendId,
     };
     
     final id = await db.insert('dpr', data);
@@ -205,6 +239,17 @@ class DatabaseService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateDPRBackendId(int id, int backendId) async {
+    final db = await database;
+    await db.update(
+      'dpr',
+      {'backendId': backendId},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    notifyListeners();
+  }
+
   Future<void> deleteDPR(int id) async {
     final db = await database;
     await db.delete(
@@ -227,6 +272,96 @@ class DatabaseService extends ChangeNotifier {
       'SELECT COUNT(*) as count FROM dpr WHERE isSynced = 0'
     );
     return Sqflite.firstIntValue(result) ?? 0;
+  }
+
+  // Get DPR by Centre Code and Return Number for MPR auto-fill
+  Future<DPR?> getDPRByCentreAndReturn(String centreCode, String returnNo) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'dpr',
+      where: 'centreCode = ? AND returnNo = ?',
+      whereArgs: [centreCode, returnNo],
+      limit: 1,
+    );
+    
+    if (maps.isEmpty) {
+      return null;
+    }
+    
+    return DPR.fromMap(maps.first);
+  }
+
+  // Update DPR record
+  Future<void> updateDPR(DPR dpr) async {
+    final db = await database;
+    
+    // Convert householdMembers to JSON string
+    final householdMembersJson = jsonEncode(
+      dpr.householdMembers.map((member) => member.toMap()).toList()
+    );
+    
+    final data = {
+      'nameAndAddress': dpr.nameAndAddress,
+      'district': dpr.district,
+      'state': dpr.state,
+      'familySize': dpr.familySize,
+      'incomeGroup': dpr.incomeGroup,
+      'centreCode': dpr.centreCode,
+      'returnNo': dpr.returnNo,
+      'monthAndYear': dpr.monthAndYear,
+      'householdMembers': householdMembersJson,
+      'latitude': dpr.latitude,
+      'longitude': dpr.longitude,
+      'otpCode': dpr.otpCode,
+      'createdAt': dpr.createdAt.toIso8601String(),
+      'isSynced': 0, // Mark as unsynced when updated
+      'backendId': dpr.backendId,
+    };
+    
+    await db.update(
+      'dpr',
+      data,
+      where: 'id = ?',
+      whereArgs: [dpr.id],
+    );
+    notifyListeners();
+  }
+
+  // Update MPR record
+  Future<void> updateMPR(MPR mpr) async {
+    final db = await database;
+    
+    // Convert items to JSON string
+    final itemsJson = jsonEncode(
+      mpr.items.map((item) => item.toMap()).toList()
+    );
+    
+    final data = {
+      'nameAndAddress': mpr.nameAndAddress,
+      'districtStateTel': mpr.districtStateTel,
+      'panelCentre': mpr.panelCentre,
+      'centreCode': mpr.centreCode,
+      'returnNo': mpr.returnNo,
+      'familySize': mpr.familySize,
+      'incomeGroup': mpr.incomeGroup,
+      'monthAndYear': mpr.monthAndYear,
+      'occupationOfHead': mpr.occupationOfHead,
+      'items': itemsJson,
+      'latitude': mpr.latitude,
+      'longitude': mpr.longitude,
+      'otpCode': mpr.otpCode,
+      'createdAt': mpr.createdAt.toIso8601String(),
+      'isSynced': 0, // Mark as unsynced when updated
+      'backendId': mpr.backendId,
+    };
+    
+    await db.update(
+      'mpr',
+      data,
+      where: 'id = ?',
+      whereArgs: [mpr.id],
+    );
+    notifyListeners();
   }
 
   // MPR CRUD Operations
@@ -253,7 +388,8 @@ class DatabaseService extends ChangeNotifier {
       'longitude': mpr.longitude,
       'otpCode': mpr.otpCode,
       'createdAt': mpr.createdAt.toIso8601String(),
-      'isSynced': mpr.isSynced ? 1 : 0,
+      'isSynced': 0,
+      'backendId': mpr.backendId,
     };
     
     final id = await db.insert('mpr', data);
@@ -283,6 +419,17 @@ class DatabaseService extends ChangeNotifier {
     await db.update(
       'mpr',
       {'isSynced': isSynced ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateMPRBackendId(int id, int backendId) async {
+    final db = await database;
+    await db.update(
+      'mpr',
+      {'backendId': backendId},
       where: 'id = ?',
       whereArgs: [id],
     );
@@ -321,7 +468,6 @@ class DatabaseService extends ChangeNotifier {
     
     for (int i = 5; i >= 0; i--) {
       final periodStart = DateTime(now.year, now.month - i, 1);
-      final periodEnd = DateTime(now.year, now.month - i + 1, 0, 23, 59, 59);
       
       final count = await db.rawQuery('''
         SELECT COUNT(*) as count FROM mpr 
@@ -369,6 +515,17 @@ class DatabaseService extends ChangeNotifier {
     await db.update(
       'fp',
       {'isSynced': isSynced ? 1 : 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    notifyListeners();
+  }
+
+  Future<void> updateFPBackendId(int id, int backendId) async {
+    final db = await database;
+    await db.update(
+      'fp',
+      {'backendId': backendId},
       where: 'id = ?',
       whereArgs: [id],
     );

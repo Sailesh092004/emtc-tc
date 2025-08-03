@@ -4,8 +4,8 @@ from datetime import datetime
 import logging
 import json
 from database import get_db
-from models import DPRCreate, MPRCreate, FPCreate, SuccessResponse, ErrorResponse, HealthResponse
-from crud import create_dpr, create_mpr, create_fp, get_database_stats, get_all_dpr, get_all_mpr, get_all_fp
+from models import DPRCreate, MPRCreate, FPCreate, DPRUpdate, MPRUpdate, SuccessResponse, ErrorResponse, HealthResponse
+from crud import create_dpr, create_mpr, create_fp, get_database_stats, get_all_dpr, get_all_mpr, get_all_fp, update_dpr, update_mpr
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -241,4 +241,84 @@ async def get_all_fp_endpoint(db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to retrieve FP records: {str(e)}"
+        )
+
+@router.put("/dpr/{dpr_id}", response_model=SuccessResponse)
+async def update_dpr_endpoint(
+    dpr_id: int,
+    dpr_data: DPRUpdate,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Update an existing DPR (Demographic Purchase Return) record"""
+    try:
+        # Log the update
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"DPR update received from {client_ip} - ID: {dpr_id}, Return No: {dpr_data.return_no}")
+        
+        # Convert Pydantic model to dict for update
+        update_data = dpr_data.dict()
+        
+        # Update the DPR record
+        db_dpr = update_dpr(db, dpr_id, update_data)
+        
+        return SuccessResponse(
+            message="DPR record updated successfully",
+            data={
+                "id": db_dpr.id,
+                "return_no": db_dpr.return_no,
+                "updated_at": db_dpr.created_at.isoformat()
+            }
+        )
+    except ValueError as e:
+        logger.error(f"DPR record not found: {str(e)}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"DPR record not found: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Error updating DPR record: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update DPR record: {str(e)}"
+        )
+
+@router.put("/mpr/{mpr_id}", response_model=SuccessResponse)
+async def update_mpr_endpoint(
+    mpr_id: int,
+    mpr_data: MPRUpdate,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Update an existing MPR (Monthly Purchase Return) record"""
+    try:
+        # Log the update
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"MPR update received from {client_ip} - ID: {mpr_id}, Return No: {mpr_data.return_no}")
+        
+        # Convert Pydantic model to dict for update
+        update_data = mpr_data.dict()
+        
+        # Update the MPR record
+        db_mpr = update_mpr(db, mpr_id, update_data)
+        
+        return SuccessResponse(
+            message="MPR record updated successfully",
+            data={
+                "id": db_mpr.id,
+                "return_no": db_mpr.return_no,
+                "updated_at": db_mpr.created_at.isoformat()
+            }
+        )
+    except ValueError as e:
+        logger.error(f"MPR record not found: {str(e)}")
+        raise HTTPException(
+            status_code=404,
+            detail=f"MPR record not found: {str(e)}"
+        )
+    except Exception as e:
+        logger.error(f"Error updating MPR record: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to update MPR record: {str(e)}"
         ) 

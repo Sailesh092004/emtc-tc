@@ -56,6 +56,9 @@ class DPRBase(BaseModel):
 class DPRCreate(DPRBase, LocationBase):
     otp_code: str = Field(..., description="OTP code for verification")
 
+class DPRUpdate(DPRBase, LocationBase):
+    otp_code: str = Field(..., description="OTP code for verification")
+
 class DPRResponse(DPRBase, LocationBase, TimestampBase):
     id: int
     otp_code: str
@@ -78,6 +81,9 @@ class MPRBase(BaseModel):
     items: List[PurchaseItem] = Field(..., max_items=10, description="Purchase items (max 10)")
 
 class MPRCreate(MPRBase, LocationBase):
+    otp_code: str = Field(..., description="OTP code for verification")
+
+class MPRUpdate(MPRBase, LocationBase):
     otp_code: str = Field(..., description="OTP code for verification")
 
 class MPRResponse(MPRBase, LocationBase, TimestampBase):
