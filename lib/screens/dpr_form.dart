@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:location/location.dart';
 import '../models/dpr.dart';
 import '../services/db_service.dart';
+import '../services/api_service.dart';
+import '../data/codebook.dart';
 
 class DPRFormScreen extends StatefulWidget {
   final DPR? editingDPR;
@@ -15,6 +18,7 @@ class DPRFormScreen extends StatefulWidget {
 
 class _DPRFormScreenState extends State<DPRFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _apiService = ApiService();
 
   // Header Form Controllers
   final _nameAndAddressController = TextEditingController();
@@ -25,6 +29,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   final _centreCodeController = TextEditingController();
   final _returnNoController = TextEditingController();
   final _monthAndYearController = TextEditingController();
+  final _mobileNumberController = TextEditingController();
   final _otpController = TextEditingController();
 
   // Household Members (up to 8)
@@ -65,6 +70,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     _centreCodeController.dispose();
     _returnNoController.dispose();
     _monthAndYearController.dispose();
+    _mobileNumberController.dispose();
     _otpController.dispose();
     for (var member in _householdMembers) {
       member.dispose();
@@ -129,7 +135,159 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     );
   }
 
+  Future<void> _sendOTP() async {
+    // Check if all required fields are filled before allowing OTP sending
+    if (_nameAndAddressController.text.isEmpty ||
+        _districtController.text.isEmpty ||
+        _stateController.text.isEmpty ||
+        _familySizeController.text.isEmpty ||
+        _incomeGroupController.text.isEmpty ||
+        _centreCodeController.text.isEmpty ||
+        _returnNoController.text.isEmpty ||
+        _monthAndYearController.text.isEmpty ||
+        _mobileNumberController.text.isEmpty ||
+        _householdMembers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill all required fields before sending OTP'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check if all household members have required fields
+    for (int i = 0; i < _householdMembers.length; i++) {
+      final member = _householdMembers[i];
+      if (member.nameController.text.isEmpty ||
+          member.relationshipController.text.isEmpty ||
+          member.genderController.text.isEmpty ||
+          member.ageController.text.isEmpty ||
+          member.educationController.text.isEmpty ||
+          member.occupationController.text.isEmpty ||
+          member.annualIncomeJobController.text.isEmpty ||
+          member.annualIncomeOtherController.text.isEmpty ||
+          member.otherIncomeSourceController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please fill all required fields for household member ${i + 1}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
+    setState(() {
+      _isOtpLoading = true;
+    });
+
+    try {
+      final success = await _apiService.sendOTP(_mobileNumberController.text, 'dpr');
+
+      setState(() {
+        _isOtpLoading = false;
+      });
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('OTP sent to ${_mobileNumberController.text}'),
+            backgroundColor: const Color(0xFF795548), // Brown 600 for success
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // Show testing dialog
+        _showOtpTestingDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Using offline mode. For testing, use OTP: 123456'),
+            backgroundColor: const Color(0xFFFF8A65), // Deep Orange 300 for warning
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isOtpLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Network error. Using offline mode. Use OTP: 123456'),
+          backgroundColor: const Color(0xFFFF8A65), // Deep Orange 300 for warning
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
+  void _showOtpTestingDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('OTP Sent'),
+        content: const Text(
+          'OTP has been sent to your phone number.\n\n'
+          'For testing purposes, you can use:\n'
+          '• OTP: 123456\n'
+          '• Or any 6-digit number\n\n'
+          'In production, you would receive the OTP via SMS.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _verifyOTP() async {
+    // Check if all required fields are filled before allowing OTP verification
+    if (_nameAndAddressController.text.isEmpty ||
+        _districtController.text.isEmpty ||
+        _stateController.text.isEmpty ||
+        _familySizeController.text.isEmpty ||
+        _incomeGroupController.text.isEmpty ||
+        _centreCodeController.text.isEmpty ||
+        _returnNoController.text.isEmpty ||
+        _monthAndYearController.text.isEmpty ||
+        _mobileNumberController.text.isEmpty ||
+        _householdMembers.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please fill all required fields before OTP verification'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check if all household members have required fields
+    for (int i = 0; i < _householdMembers.length; i++) {
+      final member = _householdMembers[i];
+      if (member.nameController.text.isEmpty ||
+          member.relationshipController.text.isEmpty ||
+          member.genderController.text.isEmpty ||
+          member.ageController.text.isEmpty ||
+          member.educationController.text.isEmpty ||
+          member.occupationController.text.isEmpty ||
+          member.annualIncomeJobController.text.isEmpty ||
+          member.annualIncomeOtherController.text.isEmpty ||
+          member.otherIncomeSourceController.text.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please fill all required fields for household member ${i + 1}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+    }
+
     if (_otpController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -145,8 +303,13 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     });
 
     try {
-      // For testing, accept any OTP
-      final isValid = _otpController.text.isNotEmpty;
+      // Try the actual OTP first
+      bool isValid = await _apiService.verifyOTP(_mobileNumberController.text, _otpController.text, 'dpr');
+      
+      // If that fails, allow "123456" as a fallback for testing
+      if (!isValid && _otpController.text == '123456') {
+        isValid = true;
+      }
 
       setState(() {
         _isOtpVerified = isValid;
@@ -219,6 +382,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     _centreCodeController.text = dpr.centreCode;
     _returnNoController.text = dpr.returnNo;
     _monthAndYearController.text = dpr.monthAndYear;
+    _mobileNumberController.text = dpr.mobileNumber;
     _otpController.text = dpr.otpCode;
     _latitude = dpr.latitude;
     _longitude = dpr.longitude;
@@ -233,11 +397,13 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     for (var member in dpr.householdMembers) {
       final formMember = HouseholdMemberForm();
       formMember.nameController.text = member.name;
+      
       formMember.relationshipController.text = member.relationshipWithHead;
       formMember.genderController.text = member.gender;
       formMember.ageController.text = member.age.toString();
       formMember.educationController.text = member.education;
       formMember.occupationController.text = member.occupation;
+      
       formMember.annualIncomeJobController.text = member.annualIncomeJob.toString();
       formMember.annualIncomeOtherController.text = member.annualIncomeOther.toString();
       formMember.otherIncomeSourceController.text = member.otherIncomeSource;
@@ -276,6 +442,10 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     });
 
     try {
+      // Get current LO phone number
+      final prefs = await SharedPreferences.getInstance();
+      final currentLoPhone = prefs.getString('lo_phone');
+
       // Convert form data to HouseholdMember objects
       final members = _householdMembers.map((form) => HouseholdMember(
         name: form.nameController.text,
@@ -299,18 +469,23 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
         centreCode: _centreCodeController.text,
         returnNo: _returnNoController.text,
         monthAndYear: _monthAndYearController.text,
+        mobileNumber: _mobileNumberController.text,
         householdMembers: members,
         latitude: _latitude,
         longitude: _longitude,
         otpCode: _otpController.text,
         createdAt: DateTime.now(),
+        loPhone: currentLoPhone,
       );
 
       final dbService = Provider.of<DatabaseService>(context, listen: false);
       
       if (widget.editingDPR != null) {
         // Update existing DPR
-        final updatedDPR = dpr.copyWith(id: widget.editingDPR!.id);
+        final updatedDPR = dpr.copyWith(
+          id: widget.editingDPR!.id,
+          backendId: widget.editingDPR!.backendId,
+        );
         await dbService.updateDPR(updatedDPR);
         
         setState(() {
@@ -478,21 +653,22 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
               ),
             ),
             const SizedBox(width: 16),
-            Expanded(
-              child: TextFormField(
-                controller: _incomeGroupController,
-                decoration: const InputDecoration(
-                  labelText: 'Income Group *',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter income group';
-                  }
-                  return null;
-                },
-              ),
-            ),
+                         Expanded(
+               child: TextFormField(
+                 controller: _incomeGroupController,
+                 decoration: const InputDecoration(
+                   labelText: 'Income Group *',
+                   border: OutlineInputBorder(),
+                   helperText: 'Enter income group code (01-10)',
+                 ),
+                 validator: (value) {
+                   if (value == null || value.isEmpty) {
+                     return 'Please enter income group';
+                   }
+                   return null;
+                 },
+               ),
+             ),
           ],
         ),
         const SizedBox(height: 16),
@@ -535,18 +711,84 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
         const SizedBox(height: 16),
 
         TextFormField(
-          controller: _monthAndYearController,
+          controller: _mobileNumberController,
           decoration: const InputDecoration(
-            labelText: 'Month & Year *',
+            labelText: 'Mobile Number of Head of Household *',
             border: OutlineInputBorder(),
-            hintText: 'MM/YYYY',
+            helperText: 'Enter 10-digit mobile number',
+            prefixIcon: Icon(Icons.phone),
           ),
+          keyboardType: TextInputType.phone,
           validator: (value) {
             if (value == null || value.isEmpty) {
-              return 'Please enter month and year';
+              return 'Please enter mobile number';
+            }
+            if (value.length != 10 || !RegExp(r'^[0-9]+$').hasMatch(value)) {
+              return 'Please enter a valid 10-digit mobile number';
             }
             return null;
           },
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+                         Expanded(
+               child: TextFormField(
+                 controller: TextEditingController(
+                   text: _monthAndYearController.text.split('/').isNotEmpty ? _monthAndYearController.text.split('/')[0] : DateTime.now().month.toString().padLeft(2, '0')
+                 ),
+                 decoration: const InputDecoration(
+                   labelText: 'Month *',
+                   border: OutlineInputBorder(),
+                   helperText: 'Enter month (01-12)',
+                 ),
+                 keyboardType: TextInputType.number,
+                 onChanged: (value) {
+                   final currentYear = _monthAndYearController.text.split('/').length > 1 ? _monthAndYearController.text.split('/')[1] : DateTime.now().year.toString();
+                   _monthAndYearController.text = '$value/$currentYear';
+                 },
+                 validator: (value) {
+                   if (value == null || value.isEmpty) {
+                     return 'Please enter month';
+                   }
+                   final month = int.tryParse(value);
+                   if (month == null || month < 1 || month > 12) {
+                     return 'Please enter a valid month (01-12)';
+                   }
+                   return null;
+                 },
+               ),
+             ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: TextFormField(
+                controller: TextEditingController(
+                  text: _monthAndYearController.text.split('/').length > 1 ? _monthAndYearController.text.split('/')[1] : DateTime.now().year.toString()
+                ),
+                decoration: const InputDecoration(
+                  labelText: 'Year *',
+                  border: OutlineInputBorder(),
+                  helperText: 'Enter year (YYYY)',
+                ),
+                keyboardType: TextInputType.number,
+                onChanged: (value) {
+                  final currentMonth = _monthAndYearController.text.split('/').isNotEmpty ? _monthAndYearController.text.split('/')[0] : '01';
+                  _monthAndYearController.text = '$currentMonth/$value';
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter year';
+                  }
+                  final year = int.tryParse(value);
+                  if (year == null || year < 2000 || year > 2030) {
+                    return 'Please enter a valid year (2000-2030)';
+                  }
+                  return null;
+                },
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -631,42 +873,44 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
                           ),
                         ),
                         const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller: member.relationshipController,
-                            decoration: const InputDecoration(
-                              labelText: 'Relationship with Head *',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter relationship';
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
+                                                 Expanded(
+                           child: TextFormField(
+                             controller: member.relationshipController,
+                             decoration: const InputDecoration(
+                               labelText: 'Relationship with Head *',
+                               border: OutlineInputBorder(),
+                               helperText: 'Enter relationship code (01-08)',
+                             ),
+                             validator: (value) {
+                               if (value == null || value.isEmpty) {
+                                 return 'Please enter relationship';
+                               }
+                               return null;
+                             },
+                           ),
+                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
 
                     Row(
                       children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: member.genderController,
-                            decoration: const InputDecoration(
-                              labelText: 'Gender (M/F/Other) *',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter gender';
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
+                                                 Expanded(
+                           child: TextFormField(
+                             controller: member.genderController,
+                             decoration: const InputDecoration(
+                               labelText: 'Gender *',
+                               border: OutlineInputBorder(),
+                               helperText: 'Enter gender code (M/F/O)',
+                             ),
+                             validator: (value) {
+                               if (value == null || value.isEmpty) {
+                                 return 'Please enter gender';
+                               }
+                               return null;
+                             },
+                           ),
+                         ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextFormField(
@@ -674,14 +918,19 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
                             decoration: const InputDecoration(
                               labelText: 'Age *',
                               border: OutlineInputBorder(),
+                              helperText: 'Enter age (0-120)',
                             ),
                             keyboardType: TextInputType.number,
                             validator: (value) {
                               if (value == null || value.isEmpty) {
                                 return 'Please enter age';
                               }
-                              if (int.tryParse(value) == null) {
+                              final age = int.tryParse(value);
+                              if (age == null) {
                                 return 'Please enter a valid age';
+                              }
+                              if (age < 0 || age > 120) {
+                                return 'Age must be between 0 and 120';
                               }
                               return null;
                             },
@@ -693,37 +942,39 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
 
                     Row(
                       children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: member.educationController,
-                            decoration: const InputDecoration(
-                              labelText: 'Education *',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter education';
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
+                                                 Expanded(
+                           child: TextFormField(
+                             controller: member.educationController,
+                             decoration: const InputDecoration(
+                               labelText: 'Education *',
+                               border: OutlineInputBorder(),
+                               helperText: 'Enter education code (01-10)',
+                             ),
+                             validator: (value) {
+                               if (value == null || value.isEmpty) {
+                                 return 'Please enter education';
+                               }
+                               return null;
+                             },
+                           ),
+                         ),
                         const SizedBox(width: 16),
-                        Expanded(
-                          child: TextFormField(
-                            controller: member.occupationController,
-                            decoration: const InputDecoration(
-                              labelText: 'Occupation *',
-                              border: OutlineInputBorder(),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter occupation';
-                              }
-                              return null;
-                            },
-                          ),
-                        ),
+                                                 Expanded(
+                           child: TextFormField(
+                             controller: member.occupationController,
+                             decoration: const InputDecoration(
+                               labelText: 'Occupation *',
+                               border: OutlineInputBorder(),
+                               helperText: 'Enter occupation code (01-14)',
+                             ),
+                             validator: (value) {
+                               if (value == null || value.isEmpty) {
+                                 return 'Please enter occupation';
+                               }
+                               return null;
+                             },
+                           ),
+                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -826,17 +1077,45 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
         Row(
           children: [
             Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _isOtpLoading ? null : _sendOTP,
+                icon: _isOtpLoading 
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.send),
+                label: Text(_isOtpLoading ? 'Sending...' : 'Send OTP'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFD84315),
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        Row(
+          children: [
+            Expanded(
               child: TextFormField(
                 controller: _otpController,
                 decoration: const InputDecoration(
-                  labelText: 'OTP *',
+                  labelText: 'Enter OTP *',
                   border: OutlineInputBorder(),
-                  hintText: 'Enter any OTP for testing',
+                  hintText: 'Enter 6-digit OTP',
+                  helperText: 'Check your mobile for OTP',
                 ),
                 keyboardType: TextInputType.number,
+                maxLength: 6,
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter OTP';
+                  }
+                  if (value.length != 6 || !RegExp(r'^[0-9]+$').hasMatch(value)) {
+                    return 'Please enter a valid 6-digit OTP';
                   }
                   return null;
                 },
@@ -845,6 +1124,10 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
             const SizedBox(width: 16),
             ElevatedButton(
               onPressed: _isOtpLoading ? null : _verifyOTP,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+              ),
               child: _isOtpLoading
                   ? const SizedBox(
                       width: 20,

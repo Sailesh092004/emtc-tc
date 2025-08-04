@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:location/location.dart';
 import '../models/mpr.dart';
 import '../services/db_service.dart';
 import '../services/api_service.dart';
+import '../data/codebook.dart';
 
 class MPRFormScreen extends StatefulWidget {
   final MPR? editingMPR;
@@ -47,14 +49,9 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
   bool _isAutoFilled = false;
   bool _isLoadingDPR = false;
   String? _dprLoadMessage;
+  String? _linkedMobileNumber; // Mobile number from linked DPR
 
-  // Dropdown options
-  final List<String> _fibreCodes = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
-  final List<String> _sectorCodes = ['01', '02', '03', '04', '05'];
-  final List<String> _colourCodes = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
-  final List<String> _shopTypeCodes = ['01', '02', '03', '04', '05'];
-  final List<String> _purchaseTypeCodes = ['01', '02', '03', '04'];
-  final List<String> _dressIntendedCodes = ['01', '02', '03', '04', '05', '06'];
+
 
   @override
   void initState() {
@@ -145,7 +142,27 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     });
 
     try {
-      final isValid = await _apiService.verifyOTP('', _otpController.text);
+      if (_linkedMobileNumber == null || _linkedMobileNumber!.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No linked DPR mobile number found. Please load DPR data first.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isOtpLoading = false;
+        });
+        return;
+      }
+
+      // Try the actual OTP first
+      bool isValid = await _apiService.verifyOTP(_linkedMobileNumber!, _otpController.text, 'mpr');
+      
+      // If that fails, allow "123456" as a fallback for testing
+      if (!isValid && _otpController.text == '123456') {
+        isValid = true;
+      }
+
       setState(() {
         _isOtpVerified = isValid;
         _isOtpLoading = false;
@@ -202,7 +219,10 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
 
     if (!_isOtpVerified) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please verify OTP before submitting'), backgroundColor: Colors.red),
+        const SnackBar(
+          content: Text('Please verify OTP before submitting'),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -219,6 +239,10 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     });
 
     try {
+      // Get current LO phone number
+      final prefs = await SharedPreferences.getInstance();
+      final currentLoPhone = prefs.getString('lo_phone');
+
       // Convert form data to PurchaseItem objects
       final items = _purchaseItems.map((form) => PurchaseItem(
         itemName: form.itemNameController.text,
@@ -253,13 +277,17 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         longitude: _longitude,
         otpCode: _otpController.text,
         createdAt: DateTime.now(),
+        loPhone: currentLoPhone,
       );
 
       final dbService = Provider.of<DatabaseService>(context, listen: false);
       
       if (widget.editingMPR != null) {
         // Update existing MPR
-        final updatedMPR = mpr.copyWith(id: widget.editingMPR!.id);
+        final updatedMPR = mpr.copyWith(
+          id: widget.editingMPR!.id,
+          backendId: widget.editingMPR!.backendId,
+        );
         await dbService.updateMPR(updatedMPR);
         
         setState(() {
@@ -309,6 +337,8 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     }
   }
 
+
+
   void _populateFormWithMPR(MPR mpr) {
     _nameAndAddressController.text = mpr.nameAndAddress;
     _districtStateTelController.text = mpr.districtStateTel;
@@ -316,9 +346,18 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     _centreCodeController.text = mpr.centreCode;
     _returnNoController.text = mpr.returnNo;
     _familySizeController.text = mpr.familySize.toString();
-    _incomeGroupController.text = mpr.incomeGroup;
+    // Only set dropdown values if they exist in the dropdown options
+    if (mpr.incomeGroup.isNotEmpty && incomeGroupCodes.containsKey(mpr.incomeGroup)) {
+      _incomeGroupController.text = mpr.incomeGroup;
+    } else {
+      _incomeGroupController.text = '';
+    }
     _monthAndYearController.text = mpr.monthAndYear;
-    _occupationOfHeadController.text = mpr.occupationOfHead;
+    if (mpr.occupationOfHead.isNotEmpty && occupationCodes.containsKey(mpr.occupationOfHead)) {
+      _occupationOfHeadController.text = mpr.occupationOfHead;
+    } else {
+      _occupationOfHeadController.text = '';
+    }
     _otpController.text = mpr.otpCode;
     _latitude = mpr.latitude;
     _longitude = mpr.longitude;
@@ -333,15 +372,56 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     for (var item in mpr.items) {
       final formItem = PurchaseItemForm();
       formItem.itemNameController.text = item.itemName;
-      formItem.itemCodeController.text = item.itemCode;
-      formItem.monthOfPurchaseController.text = item.monthOfPurchase;
-      formItem.fibreCodeController.text = item.fibreCode;
-      formItem.sectorCodeController.text = item.sectorOfManufactureCode;
-      formItem.colourCodeController.text = item.colourDesignCode;
+      // Only set dropdown values if they exist in the dropdown options
+      if (item.itemCode.isNotEmpty && varietyCodes.containsKey(item.itemCode)) {
+        formItem.itemCodeController.text = item.itemCode;
+      } else {
+        formItem.itemCodeController.text = '';
+        print('Invalid item code found: ${item.itemCode}');
+      }
+      if (item.monthOfPurchase.isNotEmpty && monthCodes.containsKey(item.monthOfPurchase)) {
+        formItem.monthOfPurchaseController.text = item.monthOfPurchase;
+      } else {
+        formItem.monthOfPurchaseController.text = '';
+        print('Invalid month code found: ${item.monthOfPurchase}');
+      }
+      if (item.fibreCode.isNotEmpty && fibreCodes.containsKey(item.fibreCode)) {
+        formItem.fibreCodeController.text = item.fibreCode;
+      } else {
+        formItem.fibreCodeController.text = '';
+        print('Invalid fibre code found: ${item.fibreCode}');
+      }
+      if (item.sectorOfManufactureCode.isNotEmpty && sectorCodes.containsKey(item.sectorOfManufactureCode)) {
+        formItem.sectorCodeController.text = item.sectorOfManufactureCode;
+      } else {
+        formItem.sectorCodeController.text = '';
+        print('Invalid sector code found: ${item.sectorOfManufactureCode}');
+      }
+      if (item.colourDesignCode.isNotEmpty && colourCodes.containsKey(item.colourDesignCode)) {
+        formItem.colourCodeController.text = item.colourDesignCode;
+      } else {
+        formItem.colourCodeController.text = '';
+        print('Invalid colour code found: ${item.colourDesignCode}');
+      }
       formItem.personAgeGenderController.text = item.personAgeGender;
-      formItem.shopTypeCodeController.text = item.typeOfShopCode;
-      formItem.purchaseTypeCodeController.text = item.purchaseTypeCode;
-      formItem.dressIntendedCodeController.text = item.dressIntendedCode;
+      if (item.typeOfShopCode.isNotEmpty && shopTypeCodes.containsKey(item.typeOfShopCode)) {
+        formItem.shopTypeCodeController.text = item.typeOfShopCode;
+      } else {
+        formItem.shopTypeCodeController.text = '';
+        print('Invalid shop type code found: ${item.typeOfShopCode}');
+      }
+      if (item.purchaseTypeCode.isNotEmpty && purchaseTypeCodes.containsKey(item.purchaseTypeCode)) {
+        formItem.purchaseTypeCodeController.text = item.purchaseTypeCode;
+      } else {
+        formItem.purchaseTypeCodeController.text = '';
+        print('Invalid purchase type code found: ${item.purchaseTypeCode}');
+      }
+      if (item.dressIntendedCode.isNotEmpty && dressIntendedCodes.containsKey(item.dressIntendedCode)) {
+        formItem.dressIntendedCodeController.text = item.dressIntendedCode;
+      } else {
+        formItem.dressIntendedCodeController.text = '';
+        print('Invalid dress intended code found: ${item.dressIntendedCode}');
+      }
       formItem.lengthInMetersController.text = item.lengthInMeters.toString();
       formItem.pricePerMeterController.text = item.pricePerMeter.toString();
       formItem.totalAmountController.text = item.totalAmountPaid.toString();
@@ -349,6 +429,124 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
       formItem.isImportedController.text = item.isImported ? 'Y' : 'N';
       _purchaseItems.add(formItem);
     }
+    
+    // Force rebuild to ensure dropdowns are properly updated
+    setState(() {});
+    
+    // Additional validation to ensure no invalid values remain
+    for (var item in _purchaseItems) {
+      if (item.sectorCodeController.text.isNotEmpty && !sectorCodes.containsKey(item.sectorCodeController.text)) {
+        print('Clearing invalid sector code: ${item.sectorCodeController.text}');
+        item.sectorCodeController.text = '';
+      }
+      if (item.itemCodeController.text.isNotEmpty && !varietyCodes.containsKey(item.itemCodeController.text)) {
+        print('Clearing invalid item code: ${item.itemCodeController.text}');
+        item.itemCodeController.text = '';
+      }
+      if (item.monthOfPurchaseController.text.isNotEmpty && !monthCodes.containsKey(item.monthOfPurchaseController.text)) {
+        print('Clearing invalid month code: ${item.monthOfPurchaseController.text}');
+        item.monthOfPurchaseController.text = '';
+      }
+      if (item.fibreCodeController.text.isNotEmpty && !fibreCodes.containsKey(item.fibreCodeController.text)) {
+        print('Clearing invalid fibre code: ${item.fibreCodeController.text}');
+        item.fibreCodeController.text = '';
+      }
+      if (item.colourCodeController.text.isNotEmpty && !colourCodes.containsKey(item.colourCodeController.text)) {
+        print('Clearing invalid colour code: ${item.colourCodeController.text}');
+        item.colourCodeController.text = '';
+      }
+      if (item.shopTypeCodeController.text.isNotEmpty && !shopTypeCodes.containsKey(item.shopTypeCodeController.text)) {
+        print('Clearing invalid shop type code: ${item.shopTypeCodeController.text}');
+        item.shopTypeCodeController.text = '';
+      }
+      if (item.purchaseTypeCodeController.text.isNotEmpty && !purchaseTypeCodes.containsKey(item.purchaseTypeCodeController.text)) {
+        print('Clearing invalid purchase type code: ${item.purchaseTypeCodeController.text}');
+        item.purchaseTypeCodeController.text = '';
+      }
+      if (item.dressIntendedCodeController.text.isNotEmpty && !dressIntendedCodes.containsKey(item.dressIntendedCodeController.text)) {
+        print('Clearing invalid dress intended code: ${item.dressIntendedCodeController.text}');
+        item.dressIntendedCodeController.text = '';
+      }
+    }
+  }
+
+  // Send OTP to linked DPR mobile number
+  Future<void> _sendOTPToLinkedDPR() async {
+    if (_linkedMobileNumber == null || _linkedMobileNumber!.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No linked DPR found. Please load DPR data first.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isOtpLoading = true;
+    });
+
+    try {
+      final success = await _apiService.sendOTP(_linkedMobileNumber!, 'mpr');
+
+      setState(() {
+        _isOtpLoading = false;
+      });
+
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('OTP sent to linked DPR mobile: $_linkedMobileNumber'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // Show testing dialog
+        _showOtpTestingDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Using offline mode. For testing, use OTP: 123456'),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      setState(() {
+        _isOtpLoading = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Network error. Using offline mode. Use OTP: 123456'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+
+  void _showOtpTestingDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('OTP Sent'),
+        content: const Text(
+          'OTP has been sent to your phone number.\n\n'
+          'For testing purposes, you can use:\n'
+          '• OTP: 123456\n'
+          '• Or any 6-digit number\n\n'
+          'In production, you would receive the OTP via SMS.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   // Auto-fill MPR fields from DPR data
@@ -375,7 +573,12 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         _nameAndAddressController.text = dpr.nameAndAddress;
         _districtStateTelController.text = '${dpr.district}, ${dpr.state}';
         _familySizeController.text = dpr.familySize.toString();
-        _incomeGroupController.text = dpr.incomeGroup;
+        // Only set income group if it exists in the dropdown options
+        if (dpr.incomeGroup.isNotEmpty && incomeGroupCodes.containsKey(dpr.incomeGroup)) {
+          _incomeGroupController.text = dpr.incomeGroup;
+        } else {
+          _incomeGroupController.text = ''; // Clear if invalid
+        }
         
         // Find occupation from household members (head of family)
         String occupation = '';
@@ -388,9 +591,16 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
           );
           occupation = headMember.occupation;
         }
-        _occupationOfHeadController.text = occupation;
+        
+        // Only set occupation if it exists in the dropdown options
+        if (occupation.isNotEmpty && occupationCodes.containsKey(occupation)) {
+          _occupationOfHeadController.text = occupation;
+        } else {
+          _occupationOfHeadController.text = ''; // Clear if invalid
+        }
         
         setState(() {
+          _linkedMobileNumber = dpr.mobileNumber; // Store linked mobile number
           _isAutoFilled = true;
           _dprLoadMessage = '✔ DPR data loaded for Return No: $returnNo';
         });
@@ -404,6 +614,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         );
       } else {
         setState(() {
+          _linkedMobileNumber = null;
           _isAutoFilled = false;
           _dprLoadMessage = '⚠ No DPR found for Centre Code: $centreCode, Return No: $returnNo';
         });
@@ -418,6 +629,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
       }
     } catch (e) {
       setState(() {
+        _linkedMobileNumber = null;
         _dprLoadMessage = '❌ Error loading DPR data: $e';
       });
       
@@ -563,21 +775,39 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-                            Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
                     'Header Information',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
-                  if (_centreCodeController.text.isNotEmpty && _returnNoController.text.isNotEmpty)
-                    TextButton.icon(
-                      onPressed: _isLoadingDPR ? null : _fetchDprDetailsIfAvailable,
-                      icon: _isLoadingDPR 
-                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Icon(Icons.refresh, size: 16),
-                      label: Text(_isLoadingDPR ? 'Loading...' : 'Load DPR Data'),
-                    ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      if (_centreCodeController.text.isNotEmpty && _returnNoController.text.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: _isLoadingDPR ? null : _fetchDprDetailsIfAvailable,
+                          icon: _isLoadingDPR 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.refresh, size: 16),
+                          label: Text(_isLoadingDPR ? 'Loading...' : 'Load DPR'),
+                        ),
+                      if (_linkedMobileNumber != null && _linkedMobileNumber!.isNotEmpty)
+                        TextButton.icon(
+                          onPressed: _isOtpLoading ? null : _sendOTPToLinkedDPR,
+                          icon: _isOtpLoading 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.send, size: 16),
+                          label: Text(_isOtpLoading ? 'Sending...' : 'Send OTP'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFFD84315),
+                          ),
+                        ),
+                    ],
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -602,7 +832,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
             TextFormField(
               controller: _districtStateTelController,
               decoration: InputDecoration(
-                labelText: 'District, State, Tel No. *',
+                                  labelText: 'District, State, Tel *',
                 border: const OutlineInputBorder(),
                 filled: _isAutoFilled,
                 fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
@@ -723,19 +953,41 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: _incomeGroupController,
-                    decoration: InputDecoration(
-                      labelText: 'Income Group *',
-                      border: const OutlineInputBorder(),
-                      filled: _isAutoFilled,
-                      fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
-                      suffixIcon: _isAutoFilled 
-                        ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
-                        : null,
-                    ),
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
-                    readOnly: _isAutoFilled,
+                  child:                 DropdownButtonFormField<String>(
+                  value: _incomeGroupController.text.isEmpty || !incomeGroupCodes.containsKey(_incomeGroupController.text) ? null : _incomeGroupController.text,
+                  decoration: InputDecoration(
+                    labelText: 'Income Group *',
+                    border: const OutlineInputBorder(),
+                    filled: _isAutoFilled,
+                    fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
+                    suffixIcon: _isAutoFilled 
+                      ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
+                      : null,
+                    helperText: 'Select income range',
+                  ),
+                  isExpanded: true,
+                    items: incomeGroupCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
+                    onChanged: _isAutoFilled ? null : (value) {
+                      _incomeGroupController.text = value ?? '';
+                    },
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !incomeGroupCodes.containsKey(value)) {
+                        // Clear invalid value
+                        _incomeGroupController.text = '';
+                        return 'Invalid income group';
+                      }
+                      return null;
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -753,19 +1005,41 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _occupationOfHeadController,
+              DropdownButtonFormField<String>(
+                value: _occupationOfHeadController.text.isEmpty || !occupationCodes.containsKey(_occupationOfHeadController.text) ? null : _occupationOfHeadController.text,
                 decoration: InputDecoration(
-                  labelText: 'Occupation of Head of Family *',
+                  labelText: 'Occupation of Head *',
                   border: const OutlineInputBorder(),
                   filled: _isAutoFilled,
                   fillColor: _isAutoFilled ? Colors.grey.shade100 : null,
                   suffixIcon: _isAutoFilled 
                     ? const Icon(Icons.auto_awesome, color: Colors.green, size: 16)
                     : null,
+                  helperText: 'Select occupation category',
                 ),
-                validator: (value) => value?.isEmpty == true ? 'Required' : null,
-                readOnly: _isAutoFilled,
+                isExpanded: true,
+                items: occupationCodes.entries.map((e) => 
+                  DropdownMenuItem(
+                    value: e.key, 
+                    child: Text(
+                      '${e.key} - ${e.value}',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    )
+                  )
+                ).toList(),
+                onChanged: _isAutoFilled ? null : (value) {
+                  _occupationOfHeadController.text = value ?? '';
+                },
+                validator: (value) {
+                  if (value?.isEmpty == true) return 'Required';
+                  if (value != null && !occupationCodes.containsKey(value)) {
+                    // Clear invalid value
+                    _occupationOfHeadController.text = '';
+                    return 'Invalid occupation';
+                  }
+                  return null;
+                },
               ),
           ],
         ),
@@ -846,13 +1120,36 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                 ),
                 const SizedBox(width: 16),
                 Expanded(
-                  child: TextFormField(
-                    controller: item.itemCodeController,
+                  child: DropdownButtonFormField<String>(
+                    value: item.itemCodeController.text.isEmpty || !varietyCodes.containsKey(item.itemCodeController.text) ? null : item.itemCodeController.text,
                     decoration: const InputDecoration(
                       labelText: 'Item Code *',
                       border: OutlineInputBorder(),
+                      helperText: 'Select from standardized item codes',
                     ),
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    isExpanded: true,
+                    items: varietyCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
+                    onChanged: (value) {
+                      item.itemCodeController.text = value ?? '';
+                    },
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !varietyCodes.containsKey(value)) {
+                        // Clear invalid value
+                        item.itemCodeController.text = '';
+                        return 'Invalid item code';
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ],
@@ -862,28 +1159,69 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: item.monthOfPurchaseController,
+                  child: DropdownButtonFormField<String>(
+                    value: item.monthOfPurchaseController.text.isEmpty || !monthCodes.containsKey(item.monthOfPurchaseController.text) ? null : item.monthOfPurchaseController.text,
                     decoration: const InputDecoration(
                       labelText: 'Month of Purchase *',
                       border: OutlineInputBorder(),
+                      helperText: 'Select purchase month',
                     ),
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    isExpanded: true,
+                    items: monthCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
+                    onChanged: (value) {
+                      item.monthOfPurchaseController.text = value ?? '';
+                    },
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !monthCodes.containsKey(value)) {
+                        // Clear invalid value
+                        item.monthOfPurchaseController.text = '';
+                        return 'Invalid month';
+                      }
+                      return null;
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: item.fibreCodeController.text.isEmpty ? null : item.fibreCodeController.text,
+                    value: item.fibreCodeController.text.isEmpty || !fibreCodes.containsKey(item.fibreCodeController.text) ? null : item.fibreCodeController.text,
                     decoration: const InputDecoration(
                       labelText: 'Fibre Code *',
                       border: OutlineInputBorder(),
                     ),
-                    items: _fibreCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    isExpanded: true,
+                    items: fibreCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
                     onChanged: (value) {
                       item.fibreCodeController.text = value ?? '';
                     },
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !fibreCodes.containsKey(value)) {
+                        // Clear invalid value
+                        item.fibreCodeController.text = '';
+                        return 'Invalid fibre code';
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ],
@@ -894,31 +1232,68 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: item.sectorCodeController.text.isEmpty ? null : item.sectorCodeController.text,
+                    value: item.sectorCodeController.text.isEmpty || !sectorCodes.containsKey(item.sectorCodeController.text) ? null : item.sectorCodeController.text,
                     decoration: const InputDecoration(
-                      labelText: 'Sector of Manufacture Code *',
+                      labelText: 'Sector Code *',
                       border: OutlineInputBorder(),
                     ),
-                    items: _sectorCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    isExpanded: true,
+                    items: sectorCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
                     onChanged: (value) {
                       item.sectorCodeController.text = value ?? '';
                     },
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !sectorCodes.containsKey(value)) {
+                        // Clear invalid value and reset dropdown
+                        item.sectorCodeController.text = '';
+                        setState(() {}); // Force rebuild
+                        return 'Invalid sector code';
+                      }
+                      return null;
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: item.colourCodeController.text.isEmpty ? null : item.colourCodeController.text,
+                    value: item.colourCodeController.text.isEmpty || !colourCodes.containsKey(item.colourCodeController.text) ? null : item.colourCodeController.text,
                     decoration: const InputDecoration(
-                      labelText: 'Colour/Design Code *',
+                      labelText: 'Colour Code *',
                       border: OutlineInputBorder(),
                     ),
-                    items: _colourCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    isExpanded: true,
+                    items: colourCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
                     onChanged: (value) {
                       item.colourCodeController.text = value ?? '';
                     },
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !colourCodes.containsKey(value)) {
+                        // Clear invalid value
+                        item.colourCodeController.text = '';
+                        return 'Invalid colour code';
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ],
@@ -931,7 +1306,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                   child: TextFormField(
                     controller: item.personAgeGenderController,
                     decoration: const InputDecoration(
-                      labelText: 'Person Age & Gender *',
+                      labelText: 'Age & Gender *',
                       border: OutlineInputBorder(),
                       hintText: 'e.g., 25M, 30F',
                     ),
@@ -941,16 +1316,34 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: item.shopTypeCodeController.text.isEmpty ? null : item.shopTypeCodeController.text,
+                    value: item.shopTypeCodeController.text.isEmpty || !shopTypeCodes.containsKey(item.shopTypeCodeController.text) ? null : item.shopTypeCodeController.text,
                     decoration: const InputDecoration(
-                      labelText: 'Type of Shop Code *',
+                      labelText: 'Shop Type *',
                       border: OutlineInputBorder(),
                     ),
-                    items: _shopTypeCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    isExpanded: true,
+                    items: shopTypeCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
                     onChanged: (value) {
                       item.shopTypeCodeController.text = value ?? '';
                     },
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !shopTypeCodes.containsKey(value)) {
+                        // Clear invalid value
+                        item.shopTypeCodeController.text = '';
+                        return 'Invalid shop type';
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ],
@@ -961,31 +1354,67 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: item.purchaseTypeCodeController.text.isEmpty ? null : item.purchaseTypeCodeController.text,
+                    value: item.purchaseTypeCodeController.text.isEmpty || !purchaseTypeCodes.containsKey(item.purchaseTypeCodeController.text) ? null : item.purchaseTypeCodeController.text,
                     decoration: const InputDecoration(
-                      labelText: 'Purchase Type Code *',
+                      labelText: 'Purchase Type *',
                       border: OutlineInputBorder(),
                     ),
-                    items: _purchaseTypeCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    isExpanded: true,
+                    items: purchaseTypeCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
                     onChanged: (value) {
                       item.purchaseTypeCodeController.text = value ?? '';
                     },
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !purchaseTypeCodes.containsKey(value)) {
+                        // Clear invalid value
+                        item.purchaseTypeCodeController.text = '';
+                        return 'Invalid purchase type';
+                      }
+                      return null;
+                    },
                   ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: item.dressIntendedCodeController.text.isEmpty ? null : item.dressIntendedCodeController.text,
+                    value: item.dressIntendedCodeController.text.isEmpty || !dressIntendedCodes.containsKey(item.dressIntendedCodeController.text) ? null : item.dressIntendedCodeController.text,
                     decoration: const InputDecoration(
-                      labelText: 'Dress Intended Code *',
+                      labelText: 'Dress Intended *',
                       border: OutlineInputBorder(),
                     ),
-                    items: _dressIntendedCodes.map((code) => DropdownMenuItem(value: code, child: Text(code))).toList(),
+                    isExpanded: true,
+                    items: dressIntendedCodes.entries.map((e) => 
+                      DropdownMenuItem(
+                        value: e.key, 
+                        child: Text(
+                          '${e.key} - ${e.value}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        )
+                      )
+                    ).toList(),
                     onChanged: (value) {
                       item.dressIntendedCodeController.text = value ?? '';
                     },
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && !dressIntendedCodes.containsKey(value)) {
+                        // Clear invalid value
+                        item.dressIntendedCodeController.text = '';
+                        return 'Invalid dress intended';
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ],
@@ -998,7 +1427,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                     child: TextFormField(
                     controller: item.lengthInMetersController,
                       decoration: const InputDecoration(
-                      labelText: 'Length in Meters *',
+                      labelText: 'Length (m) *',
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
@@ -1015,7 +1444,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                     child: TextFormField(
                     controller: item.pricePerMeterController,
                       decoration: const InputDecoration(
-                      labelText: 'Price per Meter *',
+                      labelText: 'Price/m *',
                         border: OutlineInputBorder(),
                       ),
                       keyboardType: TextInputType.number,
@@ -1037,7 +1466,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                   child: TextFormField(
                     controller: item.totalAmountController,
                 decoration: const InputDecoration(
-                      labelText: 'Total Amount Paid *',
+                      labelText: 'Total Amount *',
                   border: OutlineInputBorder(),
                     ),
                     keyboardType: TextInputType.number,
@@ -1050,9 +1479,10 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                   child: DropdownButtonFormField<String>(
                     value: item.isImportedController.text.isEmpty ? null : item.isImportedController.text,
                     decoration: const InputDecoration(
-                      labelText: 'Imported (Y/N) *',
+                      labelText: 'Imported *',
                       border: OutlineInputBorder(),
                     ),
+                    isExpanded: true,
                     items: const [
                       DropdownMenuItem(value: 'Y', child: Text('Yes')),
                       DropdownMenuItem(value: 'N', child: Text('No')),
@@ -1060,19 +1490,42 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                     onChanged: (value) {
                       item.isImportedController.text = value ?? '';
                     },
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
+                    validator: (value) {
+                      if (value?.isEmpty == true) return 'Required';
+                      if (value != null && value != 'Y' && value != 'N') {
+                        // Clear invalid value
+                        item.isImportedController.text = '';
+                        return 'Invalid import status';
+                      }
+                      return null;
+                    },
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: item.brandMillNameController,
+            DropdownButtonFormField<String>(
+              value: item.brandMillNameController.text.isEmpty || !millCodes.containsKey(item.brandMillNameController.text) ? null : item.brandMillNameController.text,
               decoration: const InputDecoration(
-                labelText: 'Brand/Mill Name *',
+                labelText: 'Brand/Mill *',
                 border: OutlineInputBorder(),
+                helperText: 'Select from registered textile mills',
               ),
+              isExpanded: true,
+              items: millCodes.entries.map((e) => 
+                DropdownMenuItem(
+                  value: e.key, 
+                  child: Text(
+                    '${e.key} - ${e.value}',
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  )
+                )
+              ).toList(),
+              onChanged: (value) {
+                item.brandMillNameController.text = value ?? '';
+              },
               validator: (value) => value?.isEmpty == true ? 'Required' : null,
             ),
           ],
@@ -1094,6 +1547,31 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
             ),
             const SizedBox(height: 16),
 
+            // Send OTP Button
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: _isOtpLoading ? null : _sendOTPToLinkedDPR,
+                    icon: _isOtpLoading 
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.send),
+                    label: Text(_isOtpLoading ? 'Sending...' : 'Send OTP'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFD84315),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            // OTP Input and Verify
             Row(
               children: [
                 Expanded(
@@ -1109,8 +1587,12 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                   ),
                 ),
                 const SizedBox(width: 16),
-              ElevatedButton(
+                ElevatedButton(
                   onPressed: _isOtpLoading ? null : _verifyOTP,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    foregroundColor: Colors.white,
+                  ),
                   child: _isOtpLoading
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                       : const Text('Verify'),
