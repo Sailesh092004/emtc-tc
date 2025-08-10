@@ -71,9 +71,19 @@ def update_dpr(db: Session, dpr_id: int, dpr_data: dict) -> DPR:
         if not dpr:
             raise ValueError(f"DPR record with ID {dpr_id} not found")
         
-        # Convert household members to JSON if provided
+        # Convert household members to JSON if provided. When data comes
+        # from the API layer it's already been converted to a plain dict
+        # via ``PydanticModel.dict()`` which means each member is a
+        # dictionary rather than a Pydantic model.  The previous
+        # implementation attempted to call ``member.dict()`` on each
+        # element which raised an ``AttributeError``.  Handle both cases
+        # so that updates work whether the input contains Pydantic models
+        # or plain dictionaries.
         if 'household_members' in dpr_data:
-            household_members_json = json.dumps([member.dict() for member in dpr_data['household_members']])
+            household_members_json = json.dumps([
+                member if isinstance(member, dict) else member.dict()
+                for member in dpr_data['household_members']
+            ])
             dpr_data['household_members'] = household_members_json
         
         # Update all fields
@@ -157,9 +167,16 @@ def update_mpr(db: Session, mpr_id: int, mpr_data: dict) -> MPR:
         if not mpr:
             raise ValueError(f"MPR record with ID {mpr_id} not found")
         
-        # Convert purchase items to JSON if provided
+        # Convert purchase items to JSON if provided. Similar to the DPR
+        # update above, ``mpr_data['items']`` may contain plain
+        # dictionaries if it originated from a Pydantic model that was
+        # converted using ``.dict()``.  Support both dicts and models to
+        # avoid ``AttributeError`` during updates.
         if 'items' in mpr_data:
-            items_json = json.dumps([item.dict() for item in mpr_data['items']])
+            items_json = json.dumps([
+                item if isinstance(item, dict) else item.dict()
+                for item in mpr_data['items']
+            ])
             mpr_data['items'] = items_json
         
         # Update all fields
