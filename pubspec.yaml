@@ -1,5 +1,5 @@
 name: emtc_app
-description: Mobile app for Liaison Officers to collect survey data for eMTC project - Electronic Market for Textiles and Clothing (TC, GoI)
+description: e-MTC TC - Electronic Market for Textiles and Clothing (TC, GoI) - Mobile app for Liaison Officers to collect survey data
 publish_to: 'none'
 version: 1.0.0+1
 

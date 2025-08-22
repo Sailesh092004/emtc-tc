@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,6 +14,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
   final _otpController = TextEditingController();
+  final _apiService = ApiService();
   
   bool _isLoading = false;
   bool _otpSent = false;
@@ -32,20 +34,38 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // Simulate API call delay
-      await Future.delayed(const Duration(seconds: 2));
+      final success = await _apiService.sendOTP(_phoneController.text, 'login');
       
       setState(() {
-        _otpSent = true;
+        _otpSent = success;
         _isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('OTP sent successfully! Use 123456 for testing.'),
-          backgroundColor: Colors.green,
-        ),
-      );
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('OTP sent successfully to ${_phoneController.text}'),
+            backgroundColor: const Color(0xFF795548), // Brown 600 for success
+            duration: const Duration(seconds: 3),
+          ),
+        );
+        
+        // Show testing instructions
+        _showOtpDialog();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Using offline mode. For testing, use OTP: 123456'),
+            backgroundColor: const Color(0xFFFF8A65), // Deep Orange 300 for warning
+            duration: const Duration(seconds: 5),
+          ),
+        );
+        
+        // Still show OTP field for testing
+        setState(() {
+          _otpSent = true;
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -53,11 +73,39 @@ class _LoginScreenState extends State<LoginScreen> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Failed to send OTP: $e'),
-          backgroundColor: Colors.red,
+          content: Text('Network error. Using offline mode. Use OTP: 123456'),
+          backgroundColor: const Color(0xFFFF8A65), // Deep Orange 300 for warning
+          duration: const Duration(seconds: 5),
         ),
       );
+      
+      // Show OTP field anyway for testing
+      setState(() {
+        _otpSent = true;
+      });
     }
+  }
+
+  void _showOtpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('OTP Sent'),
+        content: const Text(
+          'OTP has been sent to your phone number.\n\n'
+          'For testing purposes, you can use:\n'
+          '• OTP: 123456\n'
+          '• Or any 6-digit number\n\n'
+          'In production, you would receive the OTP via SMS.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _verifyOTP() async {
@@ -68,15 +116,19 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // Simulate API call delay
-      await Future.delayed(const Duration(seconds: 1));
+      // Try the actual OTP first
+      bool isValid = await _apiService.verifyOTP(_phoneController.text, _otpController.text, 'login');
       
-      // Mock OTP verification (123456)
-      if (_otpController.text == '123456') {
-        setState(() {
-          _isLoading = false;
-        });
+      // If that fails, allow "123456" as a fallback for testing
+      if (!isValid && _otpController.text == '123456') {
+        isValid = true;
+      }
 
+      setState(() {
+        _isLoading = false;
+      });
+
+      if (isValid) {
         // Store LO phone number
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('lo_phone', _phoneController.text);
@@ -84,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Login successful!'),
-            backgroundColor: Colors.green,
+            backgroundColor: const Color(0xFF795548), // Brown 600 for success
           ),
         );
 
@@ -96,14 +148,10 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         }
       } else {
-        setState(() {
-          _isLoading = false;
-        });
-        
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Invalid OTP. Please try again.'),
-            backgroundColor: Colors.red,
+            backgroundColor: const Color(0xFFBF360C), // Deep Orange 900 for error
           ),
         );
       }
@@ -115,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Failed to verify OTP: $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: const Color(0xFFBF360C), // Deep Orange 900 for error
         ),
       );
     }
@@ -126,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('LO Login'),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFFD84315),
         foregroundColor: Colors.white,
       ),
       body: Padding(
@@ -140,7 +188,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const Icon(
                 Icons.account_circle,
                 size: 80,
-                color: Colors.blue,
+                color: Color(0xFFD84315),
               ),
               const SizedBox(height: 16),
               const Text(
@@ -148,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: Colors.blue,
+                  color: Color(0xFFD84315),
                 ),
               ),
               const SizedBox(height: 32),
@@ -182,7 +230,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: ElevatedButton(
                     onPressed: _isLoading ? null : _sendOTP,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: const Color(0xFFD84315),
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
@@ -236,7 +284,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
               // Help Text
               const Text(
-                'For testing: Use any phone number and OTP "123456"',
+                'For testing: Use any phone number and OTP "123456"\n'
+                'The app works offline if backend is unavailable.',
                 style: TextStyle(
                   color: Colors.grey,
                   fontSize: 12,

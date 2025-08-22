@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/mpr.dart';
 import '../services/db_service.dart';
-import 'mpr_form.dart';
+import 'mpr_form.dart'; // Import MPRFormScreen for editing
 
 class MPRListScreen extends StatefulWidget {
   const MPRListScreen({super.key});
-
   @override
   State<MPRListScreen> createState() => _MPRListScreenState();
 }
@@ -14,22 +14,47 @@ class MPRListScreen extends StatefulWidget {
 class _MPRListScreenState extends State<MPRListScreen> {
   List<MPR> _mprList = [];
   bool _isLoading = true;
+  String? _currentLoPhone;
 
   @override
   void initState() {
     super.initState();
-    _loadMPRs();
+    _loadCurrentLoAndMPRs();
+  }
+
+  Future<void> _loadCurrentLoAndMPRs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _currentLoPhone = prefs.getString('lo_phone');
+      
+      if (_currentLoPhone != null) {
+        await _loadMPRs();
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadMPRs() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    if (_currentLoPhone == null) return;
+    
     try {
       final dbService = Provider.of<DatabaseService>(context, listen: false);
-      final mprs = await dbService.getAllMPR();
-      
+      final mprs = await dbService.getMPRsByLo(_currentLoPhone!);
       setState(() {
         _mprList = mprs;
         _isLoading = false;
@@ -38,24 +63,38 @@ class _MPRListScreenState extends State<MPRListScreen> {
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading MPR records: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading MPRs: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  void _editMPR(MPR mpr) {
+  void _editMPR(MPR mpr) async {
+    // Check if current LO owns this record
+    if (_currentLoPhone != null && mpr.loPhone != _currentLoPhone) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can only edit records you created'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => MPRFormScreen(editingMPR: mpr),
+        builder: (context) => MPRFormScreen(editingMPR: mpr), // Pass MPR for editing
       ),
     ).then((_) {
-      // Refresh the list when returning from edit
-      _loadMPRs();
+      _loadMPRs(); // Refresh list on return
     });
   }
 
@@ -145,7 +184,7 @@ class _MPRListScreenState extends State<MPRListScreen> {
                               ),
                               IconButton(
                                 onPressed: () => _editMPR(mpr),
-                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                icon: const Icon(Icons.edit, color: Color(0xFFD84315)),
                                 tooltip: 'Edit MPR',
                               ),
                             ],

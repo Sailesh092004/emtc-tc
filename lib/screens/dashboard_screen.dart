@@ -66,7 +66,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dashboard'),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFFD84315),
         foregroundColor: Colors.white,
         actions: [
           IconButton(
@@ -114,7 +114,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue,
+                color: Color(0xFFD84315),
               ),
             ),
             const SizedBox(height: 16),
@@ -125,7 +125,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     title: 'Total DPR',
                     value: _stats['totalDPR']?.toString() ?? '0',
                     icon: Icons.description,
-                    color: Colors.blue,
+                    color: const Color(0xFFD84315),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -202,7 +202,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue,
+                color: Color(0xFFD84315),
               ),
             ),
             const SizedBox(height: 16),
@@ -268,7 +268,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: Colors.blue,
+                color: Color(0xFFD84315),
               ),
             ),
             const SizedBox(height: 16),
@@ -361,8 +361,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       isCurved: true,
                       gradient: LinearGradient(
                         colors: [
-                          Colors.blue.withOpacity(0.8),
-                          Colors.blue.withOpacity(0.3),
+                          const Color(0xFFD84315).withOpacity(0.8),
+                          const Color(0xFFD84315).withOpacity(0.3),
                         ],
                       ),
                       barWidth: 3,
@@ -372,7 +372,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         getDotPainter: (spot, percent, barData, index) {
                           return FlDotCirclePainter(
                             radius: 4,
-                            color: Colors.blue,
+                            color: const Color(0xFFD84315),
                             strokeWidth: 2,
                             strokeColor: Colors.white,
                           );
@@ -382,8 +382,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         show: true,
                         gradient: LinearGradient(
                           colors: [
-                            Colors.blue.withOpacity(0.3),
-                            Colors.blue.withOpacity(0.1),
+                            const Color(0xFFD84315).withOpacity(0.3),
+                            const Color(0xFFD84315).withOpacity(0.1),
                           ],
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,

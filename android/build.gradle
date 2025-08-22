@@ -28,9 +28,10 @@ allprojects {
     }
 }
 
-rootProject.buildDir = '../build'
+// Use a unique build directory to avoid conflicts
+rootProject.buildDir = new File(rootProject.projectDir, '../build_android')
 subprojects {
-    project.buildDir = "${rootProject.buildDir}/${project.name}"
+    project.buildDir = new File(rootProject.buildDir, project.name)
 }
 subprojects {
     project.evaluationDependsOn(':app')

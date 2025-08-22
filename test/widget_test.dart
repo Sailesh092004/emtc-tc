@@ -5,7 +5,7 @@ import 'package:emtc_app/services/db_service.dart';
 import 'package:emtc_app/services/sync_service.dart';
 
 void main() {
-  testWidgets('eMTC App smoke test', (WidgetTester tester) async {
+  testWidgets('e-MTC TC App smoke test', (WidgetTester tester) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(MyApp(
       dbService: DatabaseService(),

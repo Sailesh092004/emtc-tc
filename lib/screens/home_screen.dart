@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../services/db_service.dart';
-import '../services/sync_service.dart';
 import 'dpr_form.dart';
 import 'mpr_form.dart';
+import 'fp_form.dart';
 import 'dpr_list.dart';
 import 'mpr_list.dart';
+import 'login_screen.dart';
 import 'dashboard_screen.dart';
-import 'fp_form.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -39,12 +40,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('eMTC'),
+        title: const Text('e-MTC TC - Home'),
+        backgroundColor: const Color(0xFFD84315),
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: () => _showSyncDialog(context),
-            tooltip: 'Sync Status',
+            icon: const Icon(Icons.logout),
+            onPressed: _logout,
+            tooltip: 'Logout',
           ),
         ],
       ),
@@ -68,11 +71,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           const Icon(
                             Icons.home,
                             size: 48,
-                            color: Colors.blue,
+                            color: Color(0xFFD84315),
                           ),
                           const SizedBox(height: 8),
                           const Text(
-                            'Welcome to eMTC',
+                            'Welcome to e-MTC TC',
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
@@ -114,7 +117,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   title: 'Total DPR',
                                   value: _stats['totalDPR']?.toString() ?? '0',
                                   icon: Icons.description,
-                                  color: Colors.blue,
+                                  color: const Color(0xFFD84315),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -193,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Demographic Purchase Return (DPR)',
                     subtitle: 'Annual household demographic data collection',
                     icon: Icons.people,
-                    color: Colors.blue,
+                    color: const Color(0xFFD84315),
                     onTap: () => _navigateToForm(context, 'dpr'),
                   ),
                   const SizedBox(height: 12),
@@ -203,7 +206,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Monthly Purchase Return (MPR)',
                     subtitle: 'Bi-monthly purchase data collection',
                     icon: Icons.shopping_cart,
-                    color: Colors.green,
+                    color: const Color(0xFF795548), // Brown 600
                     onTap: () => _navigateToForm(context, 'mpr'),
                   ),
                   const SizedBox(height: 12),
@@ -213,7 +216,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Dashboard',
                     subtitle: 'View statistics and analytics',
                     icon: Icons.analytics,
-                    color: Colors.orange,
+                    color: const Color(0xFF8D6E63), // Brown 400
                     onTap: () => _navigateToForm(context, 'dashboard'),
                   ),
                   const SizedBox(height: 12),
@@ -223,7 +226,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     title: 'Forwarding Performa (FP)',
                     subtitle: 'Location summary and forwarding data',
                     icon: Icons.location_on,
-                    color: Colors.purple,
+                    color: const Color(0xFFFF8A65), // Deep Orange 300
                     onTap: () => _navigateToForm(context, 'fp'),
                   ),
                                      const SizedBox(height: 32), // Extra padding at bottom
@@ -294,132 +297,47 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showMPROptions(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('MPR Options'),
-        content: const Text('What would you like to do?'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const MPRFormScreen()),
-              ).then((_) => _loadStats());
-            },
-            child: const Text('New MPR'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const MPRListScreen()),
-              ).then((_) => _loadStats());
-            },
-            child: const Text('View/Edit MPRs'),
-          ),
-        ],
-      ),
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('MPR Options'),
+          content: const Text('Choose an option:'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MPRFormScreen()),
+                );
+              },
+              child: const Text('New MPR'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const MPRListScreen()),
+                );
+              },
+              child: const Text('View/Edit MPRs'),
+            ),
+          ],
+        );
+      },
     );
   }
 
-  void _showSyncDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sync Status'),
-        content: Consumer<SyncService>(
-          builder: (context, sync, child) {
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _SyncStatusRow(
-                  label: 'Connection',
-                  value: sync.isOnline ? 'Online' : 'Offline',
-                  color: sync.isOnline ? Colors.green : Colors.red,
-                ),
-                const SizedBox(height: 8),
-                _SyncStatusRow(
-                  label: 'Sync Status',
-                  value: _getSyncStatusText(sync.lastSyncStatus),
-                  color: _getSyncStatusColor(sync.lastSyncStatus),
-                ),
-                const SizedBox(height: 8),
-                _SyncStatusRow(
-                  label: 'Pending Records',
-                  value: sync.pendingRecords.toString(),
-                  color: sync.pendingRecords > 0 ? Colors.orange : Colors.green,
-                ),
-                if (sync.lastSyncTime != null) ...[
-                  const SizedBox(height: 8),
-                  _SyncStatusRow(
-                    label: 'Last Sync',
-                    value: _formatDateTime(sync.lastSyncTime!),
-                    color: Colors.grey,
-                  ),
-                ],
-              ],
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
-          ),
-          Consumer<SyncService>(
-            builder: (context, sync, child) {
-              return TextButton(
-                onPressed: sync.isOnline && !sync.isSyncing
-                    ? () {
-                        sync.manualSync();
-                        Navigator.pop(context);
-                      }
-                    : null,
-                child: Text(sync.isSyncing ? 'Syncing...' : 'Sync Now'),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getSyncStatusText(String status) {
-    switch (status) {
-      case 'success':
-        return 'Success';
-      case 'failed':
-        return 'Failed';
-      case 'syncing':
-        return 'Syncing...';
-      case 'offline':
-        return 'Offline';
-      case 'no_data':
-        return 'No Data';
-      default:
-        return 'Idle';
+  Future<void> _logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('lo_phone');
+    
+    if (mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
     }
-  }
-
-  Color _getSyncStatusColor(String status) {
-    switch (status) {
-      case 'success':
-        return Colors.green;
-      case 'failed':
-        return Colors.red;
-      case 'syncing':
-        return Colors.orange;
-      case 'offline':
-        return Colors.grey;
-      default:
-        return Colors.blue;
-    }
-  }
-
-  String _formatDateTime(DateTime dateTime) {
-    return '${dateTime.day}/${dateTime.month}/${dateTime.year} ${dateTime.hour}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }
 
@@ -536,38 +454,6 @@ class _FormCard extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-class _SyncStatusRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _SyncStatusRow({
-    required this.label,
-    required this.value,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.w500),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ],
     );
   }
 } 

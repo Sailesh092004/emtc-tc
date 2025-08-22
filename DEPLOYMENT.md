@@ -20,10 +20,10 @@ git init
 git add .
 
 # Commit changes
-    git commit -m "Add eMTC FastAPI backend with deployment config"
+git commit -m "Add eMTC FastAPI backend with deployment config"
 
 # Add remote (replace with your GitHub repo URL)
-    git remote add origin https://github.com/your-username/emtc
+git remote add origin https://github.com/your-username/emtc
 
 # Push to GitHub
 git push -u origin main
@@ -89,9 +89,17 @@ Once deployed, your API will be available at:
 
 - **Base URL**: `https://your-app-name.onrender.com`
 - **Health Check**: `https://your-app-name.onrender.com/api/v1/ping`
-- **DPR Endpoint**: `https://your-app-name.onrender.com/api/v1/dpr`
-- **MPR Endpoint**: `https://your-app-name.onrender.com/api/v1/mpr`
-- **FP Endpoint**: `https://your-app-name.onrender.com/api/v1/fp`
+- **DPR Endpoints**:
+  - `POST /api/v1/dpr` - Create DPR record
+  - `PUT /api/v1/dpr/{dpr_id}` - Update DPR record
+  - `GET /api/v1/dpr` - Get all DPR records
+- **MPR Endpoints**:
+  - `POST /api/v1/mpr` - Create MPR record
+  - `PUT /api/v1/mpr/{mpr_id}` - Update MPR record
+  - `GET /api/v1/mpr` - Get all MPR records
+- **FP Endpoints**:
+  - `POST /api/v1/fp` - Create FP record
+  - `GET /api/v1/fp` - Get all FP records
 - **Stats**: `https://your-app-name.onrender.com/api/v1/stats`
 - **Swagger UI**: `https://your-app-name.onrender.com/docs`
 
@@ -116,19 +124,88 @@ curl https://your-app-name.onrender.com/api/v1/ping
 curl -X POST https://your-app-name.onrender.com/api/v1/dpr \
   -H "Content-Type: application/json" \
   -d '{
-    "household_id": "HH001",
-    "respondent_name": "John Doe",
-    "age": 35,
-    "gender": "Male",
-    "education": "Graduate",
-    "occupation": "Engineer",
-    "income_level": "Middle",
-    "latitude": 28.6139,
-    "longitude": 77.2090
+    "name_and_address": "John Doe, 123 Main St",
+    "district": "Mumbai",
+    "state": "Maharashtra",
+    "family_size": 4,
+    "income_group": "Middle",
+    "centre_code": "C001",
+    "return_no": "R001",
+    "month_and_year": "January 2024",
+    "household_members": [
+      {
+        "name": "John Doe",
+        "age": 35,
+        "gender": "Male",
+        "relationship_with_head": "Self",
+        "education": "Graduate",
+        "occupation": "Engineer",
+        "monthly_income": 50000
+      }
+    ],
+    "latitude": 19.0760,
+    "longitude": 72.8777,
+    "otp_code": "123456"
   }'
 ```
 
-### 3. Check Swagger UI
+### 3. Test MPR Endpoint
+```bash
+curl -X POST https://your-app-name.onrender.com/api/v1/mpr \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name_and_address": "John Doe, 123 Main St",
+    "district": "Mumbai",
+    "state": "Maharashtra",
+    "centre_code": "C001",
+    "return_no": "R001",
+    "month_and_year": "January 2024",
+    "items": [
+      {
+        "item_name": "Cotton Shirt",
+        "quantity": 2,
+        "price_per_unit": 500,
+        "total_amount": 1000,
+        "purchase_date": "2024-01-15",
+        "purchase_location": "Local Market"
+      }
+    ],
+    "latitude": 19.0760,
+    "longitude": 72.8777
+  }'
+```
+
+### 4. Test Update Endpoint
+```bash
+curl -X PUT https://your-app-name.onrender.com/api/v1/dpr/1 \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name_and_address": "John Doe Updated, 123 Main St",
+    "district": "Mumbai",
+    "state": "Maharashtra",
+    "family_size": 5,
+    "income_group": "Upper Middle",
+    "centre_code": "C001",
+    "return_no": "R001",
+    "month_and_year": "January 2024",
+    "household_members": [
+      {
+        "name": "John Doe",
+        "age": 35,
+        "gender": "Male",
+        "relationship_with_head": "Self",
+        "education": "Graduate",
+        "occupation": "Engineer",
+        "monthly_income": 60000
+      }
+    ],
+    "latitude": 19.0760,
+    "longitude": 72.8777,
+    "otp_code": "123456"
+  }'
+```
+
+### 5. Check Swagger UI
 Visit: `https://your-app-name.onrender.com/docs`
 
 ## 🚨 Troubleshooting
@@ -150,6 +227,10 @@ Visit: `https://your-app-name.onrender.com/docs`
    - Check database permissions
    - Verify SQLAlchemy configuration
 
+4. **CORS Issues**
+   - Check CORS configuration in `main.py`
+   - Verify allowed origins
+
 ### Debug Commands
 
 ```bash
@@ -161,6 +242,11 @@ curl https://your-app-name.onrender.com/api/v1/ping
 
 # Test all endpoints
 curl https://your-app-name.onrender.com/api/v1/stats
+
+# Test GET endpoints
+curl https://your-app-name.onrender.com/api/v1/dpr
+curl https://your-app-name.onrender.com/api/v1/mpr
+curl https://your-app-name.onrender.com/api/v1/fp
 ```
 
 ## 🔄 Auto-Deployment
@@ -190,6 +276,25 @@ curl https://your-app-name.onrender.com/api/v1/stats
 - **Paid Plans**: Start at $7/month for always-on service
 - **Database**: PostgreSQL starts at $7/month
 
+## 🆕 New Features in Current Deployment
+
+### Updated API Endpoints
+- **PUT Endpoints**: Support for updating existing DPR and MPR records
+- **GET Endpoints**: Retrieve all records for viewing in backend
+- **Enhanced Error Handling**: Better error messages and validation
+
+### Database Schema Updates
+- **LO Phone Tracking**: All records now include `lo_phone` field
+- **Backend ID Tracking**: Local records track backend-assigned IDs
+- **JSON Storage**: Complex data stored as JSON strings
+
+### Mobile App Features
+- **LO Access Control**: OTP-based login system
+- **Data Isolation**: Each LO sees only their own records
+- **List Views**: View and edit all previous entries
+- **Auto-Fill**: MPR form auto-fills from DPR data
+- **Permission Enforcement**: Only record owners can edit
+
 ## 🎉 Success!
 
 Once deployed, your eMTC backend will be:
@@ -198,5 +303,7 @@ Once deployed, your eMTC backend will be:
 - ✅ **Monitored** for health and performance
 - ✅ **Secure** with HTTPS and proper isolation
 - ✅ **Easy to update** with git push
+- ✅ **Supporting updates** with PUT endpoints
+- ✅ **Supporting data retrieval** with GET endpoints
 
-Your mobile app can now sync data to your deployed backend! 🚀 
+Your mobile app can now sync data to your deployed backend with full LO access control! 🚀 

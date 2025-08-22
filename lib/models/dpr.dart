@@ -10,6 +10,7 @@ class DPR {
   final String centreCode;
   final String returnNo;
   final String monthAndYear;
+  final String mobileNumber; // Mobile number of head of household
   final List<HouseholdMember> householdMembers;
   final double latitude;
   final double longitude;
@@ -17,6 +18,7 @@ class DPR {
   final DateTime createdAt;
   final bool isSynced;
   final int? backendId; // ID from backend after first sync
+  final String? loPhone; // LO phone number for access control
 
   DPR({
     this.id,
@@ -28,6 +30,7 @@ class DPR {
     required this.centreCode,
     required this.returnNo,
     required this.monthAndYear,
+    required this.mobileNumber,
     required this.householdMembers,
     required this.latitude,
     required this.longitude,
@@ -35,6 +38,7 @@ class DPR {
     required this.createdAt,
     this.isSynced = false,
     this.backendId,
+    this.loPhone,
   });
 
   Map<String, dynamic> toMap() {
@@ -48,6 +52,7 @@ class DPR {
       'centreCode': centreCode,
       'returnNo': returnNo,
       'monthAndYear': monthAndYear,
+      'mobileNumber': mobileNumber,
       'householdMembers': householdMembers.map((member) => member.toMap()).toList(),
       'latitude': latitude,
       'longitude': longitude,
@@ -55,6 +60,7 @@ class DPR {
       'createdAt': createdAt.toIso8601String(),
       'isSynced': isSynced ? 1 : 0,
       'backendId': backendId,
+      'loPhone': loPhone,
     };
   }
 
@@ -83,6 +89,7 @@ class DPR {
       centreCode: map['centreCode'],
       returnNo: map['returnNo'],
       monthAndYear: map['monthAndYear'],
+      mobileNumber: map['mobileNumber'] ?? '',
       householdMembers: members,
       latitude: map['latitude'],
       longitude: map['longitude'],
@@ -90,6 +97,7 @@ class DPR {
       createdAt: DateTime.parse(map['createdAt']),
       isSynced: map['isSynced'] == 1,
       backendId: map['backendId'],
+      loPhone: map['loPhone'],
     );
   }
 
@@ -103,6 +111,7 @@ class DPR {
     String? centreCode,
     String? returnNo,
     String? monthAndYear,
+    String? mobileNumber,
     List<HouseholdMember>? householdMembers,
     double? latitude,
     double? longitude,
@@ -110,6 +119,7 @@ class DPR {
     DateTime? createdAt,
     bool? isSynced,
     int? backendId,
+    String? loPhone,
   }) {
     return DPR(
       id: id ?? this.id,
@@ -121,6 +131,7 @@ class DPR {
       centreCode: centreCode ?? this.centreCode,
       returnNo: returnNo ?? this.returnNo,
       monthAndYear: monthAndYear ?? this.monthAndYear,
+      mobileNumber: mobileNumber ?? this.mobileNumber,
       householdMembers: householdMembers ?? this.householdMembers,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
@@ -128,6 +139,7 @@ class DPR {
       createdAt: createdAt ?? this.createdAt,
       isSynced: isSynced ?? this.isSynced,
       backendId: backendId ?? this.backendId,
+      loPhone: loPhone ?? this.loPhone,
     );
   }
 }

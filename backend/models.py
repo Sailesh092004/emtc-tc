@@ -115,6 +115,27 @@ class FPResponse(FPBase, LocationBase, TimestampBase):
     class Config:
         from_attributes = True
 
+# OTP Models
+class OTPRequest(BaseModel):
+    phone_number: str = Field(..., description="Phone number to send OTP to")
+    purpose: str = Field(..., description="Purpose of OTP (dpr/mpr)")
+
+class OTPResponse(BaseModel):
+    status: str = "success"
+    message: str
+    otp_sent: bool
+    phone_number: str
+
+class OTPVerificationRequest(BaseModel):
+    phone_number: str = Field(..., description="Phone number")
+    otp_code: str = Field(..., description="OTP code to verify")
+    purpose: str = Field(..., description="Purpose of verification (dpr/mpr)")
+
+class OTPVerificationResponse(BaseModel):
+    status: str = "success"
+    message: str
+    verified: bool
+
 # API Response Models
 class SuccessResponse(BaseModel):
     status: str = "success"

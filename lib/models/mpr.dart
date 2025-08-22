@@ -18,6 +18,7 @@ class MPR {
   final DateTime createdAt;
   final bool isSynced;
   final int? backendId; // ID from backend after first sync
+  final String? loPhone; // LO phone number for access control
 
   MPR({
     this.id,
@@ -37,6 +38,7 @@ class MPR {
     required this.createdAt,
     this.isSynced = false,
     this.backendId,
+    this.loPhone,
   });
 
   Map<String, dynamic> toMap() {
@@ -58,6 +60,7 @@ class MPR {
       'createdAt': createdAt.toIso8601String(),
       'isSynced': isSynced ? 1 : 0,
       'backendId': backendId,
+      'loPhone': loPhone,
     };
   }
 
@@ -94,6 +97,7 @@ class MPR {
       createdAt: DateTime.parse(map['createdAt']),
       isSynced: map['isSynced'] == 1,
       backendId: map['backendId'],
+      loPhone: map['loPhone'],
     );
   }
 
@@ -115,6 +119,7 @@ class MPR {
     DateTime? createdAt,
     bool? isSynced,
     int? backendId,
+    String? loPhone,
   }) {
     return MPR(
       id: id ?? this.id,
@@ -134,6 +139,7 @@ class MPR {
       createdAt: createdAt ?? this.createdAt,
       isSynced: isSynced ?? this.isSynced,
       backendId: backendId ?? this.backendId,
+      loPhone: loPhone ?? this.loPhone,
     );
   }
 }

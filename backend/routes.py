@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import logging
 import json
+import random
+import string
 from database import get_db
-from models import DPRCreate, MPRCreate, FPCreate, DPRUpdate, MPRUpdate, SuccessResponse, ErrorResponse, HealthResponse
+from models import DPRCreate, MPRCreate, FPCreate, DPRUpdate, MPRUpdate, SuccessResponse, ErrorResponse, HealthResponse, OTPRequest, OTPResponse, OTPVerificationRequest, OTPVerificationResponse
 from crud import create_dpr, create_mpr, create_fp, get_database_stats, get_all_dpr, get_all_mpr, get_all_fp, update_dpr, update_mpr
 
 # Configure logging
@@ -13,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 # Create router
 router = APIRouter()
+
+# In-memory OTP storage (in production, use Redis or database)
+otp_storage = {}
+
+def generate_otp():
+    """Generate a 6-digit OTP"""
+    return ''.join(random.choices(string.digits, k=6))
 
 @router.get("/ping", response_model=HealthResponse)
 async def health_check():
@@ -321,4 +330,95 @@ async def update_mpr_endpoint(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to update MPR record: {str(e)}"
+        ) 
+
+@router.post("/send-otp", response_model=OTPResponse)
+async def send_otp_endpoint(
+    request: Request,
+    otp_request: OTPRequest
+):
+    """Send OTP to the specified phone number"""
+    try:
+        # Log the request
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"OTP request received from {client_ip} for {otp_request.phone_number}")
+        
+        # Generate OTP
+        otp_code = generate_otp()
+        
+        # Store OTP with phone number and purpose
+        key = f"{otp_request.phone_number}_{otp_request.purpose}"
+        otp_storage[key] = {
+            "otp": otp_code,
+            "created_at": datetime.now(),
+            "purpose": otp_request.purpose
+        }
+        
+        # In production, integrate with SMS service here
+        # For now, we'll just log the OTP
+        logger.info(f"OTP {otp_code} generated for {otp_request.phone_number}")
+        
+        return OTPResponse(
+            message=f"OTP sent successfully to {otp_request.phone_number}",
+            otp_sent=True,
+            phone_number=otp_request.phone_number
+        )
+        
+    except Exception as e:
+        logger.error(f"Error sending OTP: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to send OTP: {str(e)}"
+        )
+
+@router.post("/verify-otp", response_model=OTPVerificationResponse)
+async def verify_otp_endpoint(
+    request: Request,
+    verification_request: OTPVerificationRequest
+):
+    """Verify OTP for the specified phone number"""
+    try:
+        # Log the request
+        client_ip = request.client.host if request.client else "unknown"
+        logger.info(f"OTP verification request received from {client_ip} for {verification_request.phone_number}")
+        
+        # Check if OTP exists
+        key = f"{verification_request.phone_number}_{verification_request.purpose}"
+        
+        if key not in otp_storage:
+            return OTPVerificationResponse(
+                message="OTP not found or expired",
+                verified=False
+            )
+        
+        stored_otp_data = otp_storage[key]
+        
+        # Check if OTP is expired (15 minutes)
+        time_diff = datetime.now() - stored_otp_data["created_at"]
+        if time_diff.total_seconds() > 900:  # 15 minutes
+            del otp_storage[key]
+            return OTPVerificationResponse(
+                message="OTP has expired",
+                verified=False
+            )
+        
+        # Verify OTP
+        if stored_otp_data["otp"] == verification_request.otp_code:
+            # Remove OTP after successful verification
+            del otp_storage[key]
+            return OTPVerificationResponse(
+                message="OTP verified successfully",
+                verified=True
+            )
+        else:
+            return OTPVerificationResponse(
+                message="Invalid OTP",
+                verified=False
+            )
+        
+    except Exception as e:
+        logger.error(f"Error verifying OTP: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to verify OTP: {str(e)}"
         ) 

@@ -8,60 +8,79 @@ A comprehensive mobile data collection system for the "Electronic Market for Tex
 eMTC Project/
 ├── 📱 Flutter Mobile App (lib/)
 │   ├── models/          # Data models (DPR, MPR, FP)
-│   ├── screens/         # UI screens
+│   ├── screens/         # UI screens (forms, lists, login)
 │   ├── services/        # Business logic & API calls
-│   └── main.dart        # App entry point
+│   └── main.dart        # App entry point with auth wrapper
 ├── 🖥️ FastAPI Backend (backend/)
 │   ├── main.py          # FastAPI app entry point
-│   ├── routes.py        # API endpoints
+│   ├── routes.py        # API endpoints (GET, POST, PUT)
 │   ├── models.py        # Pydantic schemas
 │   ├── crud.py          # Database operations
 │   ├── database.py      # Database configuration
 │   └── requirements.txt # Python dependencies
 └── 📚 Documentation
-    └── README.md        # This file
+    ├── README.md        # This file
+    └── DEPLOYMENT.md    # Deployment guide
 ```
+
+## 🔐 Liaison Officer (LO) Access Control
+
+### Authentication System
+- **OTP-Based Login**: Secure login using phone number and OTP
+- **Mock OTP**: Development OTP code is "123456"
+- **Session Management**: Phone number stored in SharedPreferences
+- **Logout Functionality**: Secure logout with session clearing
+
+### Data Isolation
+- **LO-Specific Records**: Each LO can only view/edit their own records
+- **Phone Number Tracking**: All records tagged with `lo_phone`
+- **Permission Enforcement**: Prevents unauthorized editing of other LO's records
+- **Filtered Views**: List screens show only current LO's data
 
 ## 📱 Flutter Mobile App
 
 ### Features
 
-- **Offline-First Design**: Data collection works without internet
-- **Three Form Types**:
+- **🔐 Secure Login System**: OTP-based authentication for Liaison Officers
+- **📊 Offline-First Design**: Data collection works without internet
+- **📝 Three Form Types**:
   - **DPR**: Demographic Purchase Return (annual per household)
   - **MPR**: Monthly Purchase Return (bi-monthly per household)
   - **FP**: Forwarding Performa (summary per location)
-- **GPS Location Capture**: Automatic latitude/longitude recording
-- **Digital Signature**: Signature pad for DPR consent validation
-- **Mock OTP Verification**: Simulated verification for development
-- **Data Synchronization**: Automatic sync when internet is restored
-- **Dashboard**: Statistics and charts for data visualization
+- **📍 GPS Location Capture**: Automatic latitude/longitude recording
+- **✍️ Digital Signature**: Signature pad for DPR consent validation
+- **🔄 Data Synchronization**: Automatic sync when internet is restored
+- **📋 List Views**: View and edit all previously filled entries
+- **📊 Dashboard**: Statistics and charts for data visualization
+- **🔄 Auto-Fill**: MPR form auto-fills from DPR data using Centre Code and Return Number
 
 ### Form Fields
 
 #### DPR Form Fields
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| Household ID | Text | ✅ | Unique household identifier |
-| Respondent Name | Text | ✅ | Name of the respondent |
-| Age | Number | ✅ | Age of the respondent |
-| Gender | Dropdown | ✅ | Gender selection |
-| Education | Dropdown | ✅ | Education level |
-| Occupation | Text | ✅ | Current occupation |
-| Income Level | Dropdown | ✅ | Monthly income category |
+| Name and Address | Text | ✅ | Household name and address |
+| District | Text | ✅ | District name |
+| State | Text | ✅ | State name |
+| Family Size | Number | ✅ | Number of family members |
+| Income Group | Dropdown | ✅ | Income category |
+| Centre Code | Text | ✅ | Unique centre identifier |
+| Return No | Text | ✅ | Return number |
+| Month and Year | Text | ✅ | Period of data collection |
+| Household Members | List | ✅ | Family member details |
 | Location | GPS | ✅ | Auto-captured coordinates |
-| OTP Verification | Code | ✅ | Mock verification |
-| Digital Signature | Signature | ✅ | Consent validation |
+| OTP Code | Text | ✅ | Verification code |
 
 #### MPR Form Fields
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| Household ID | Text | ✅ | Unique household identifier |
-| Purchase Date | Date | ✅ | Date of purchase |
-| Textile Type | Dropdown | ✅ | Type of textile purchased |
-| Quantity | Number | ✅ | Quantity purchased |
-| Price | Number | ✅ | Price per unit |
-| Purchase Location | Text | ✅ | Where purchase was made |
+| Name and Address | Text | ✅ | Household name and address |
+| District | Text | ✅ | District name |
+| State | Text | ✅ | State name |
+| Centre Code | Text | ✅ | Unique centre identifier |
+| Return No | Text | ✅ | Return number |
+| Month and Year | Text | ✅ | Period of data collection |
+| Purchase Items | List | ✅ | Textile purchase details |
 | Location | GPS | ✅ | Auto-captured coordinates |
 
 #### FP Form Fields
@@ -83,18 +102,22 @@ eMTC Project/
 ```sql
 CREATE TABLE dpr (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  householdId TEXT NOT NULL,
-  householdHeadName TEXT NOT NULL,
-  address TEXT NOT NULL,
-  phoneNumber TEXT NOT NULL,
-  familySize INTEGER NOT NULL,
-  monthlyIncome REAL NOT NULL,
+  name_and_address TEXT NOT NULL,
+  district TEXT NOT NULL,
+  state TEXT NOT NULL,
+  family_size INTEGER NOT NULL,
+  income_group TEXT NOT NULL,
+  centre_code TEXT NOT NULL,
+  return_no TEXT NOT NULL,
+  month_and_year TEXT NOT NULL,
+  household_members TEXT NOT NULL, -- JSON array
   latitude REAL NOT NULL,
   longitude REAL NOT NULL,
-  otpCode TEXT NOT NULL,
-  signaturePath TEXT NOT NULL,
-  createdAt TEXT NOT NULL,
-  isSynced INTEGER NOT NULL DEFAULT 0
+  otp_code TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  is_synced INTEGER NOT NULL DEFAULT 0,
+  backend_id INTEGER, -- Backend-assigned ID after sync
+  lo_phone TEXT -- Liaison Officer phone number
 );
 ```
 
@@ -102,16 +125,19 @@ CREATE TABLE dpr (
 ```sql
 CREATE TABLE mpr (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  householdId TEXT NOT NULL,
-  purchaseDate TEXT NOT NULL,
-  textileType TEXT NOT NULL,
-  quantity INTEGER NOT NULL,
-  price REAL NOT NULL,
-  purchaseLocation TEXT NOT NULL,
+  name_and_address TEXT NOT NULL,
+  district TEXT NOT NULL,
+  state TEXT NOT NULL,
+  centre_code TEXT NOT NULL,
+  return_no TEXT NOT NULL,
+  month_and_year TEXT NOT NULL,
+  items TEXT NOT NULL, -- JSON array
   latitude REAL NOT NULL,
   longitude REAL NOT NULL,
-  createdAt TEXT NOT NULL,
-  isSynced INTEGER NOT NULL DEFAULT 0
+  created_at TEXT NOT NULL,
+  is_synced INTEGER NOT NULL DEFAULT 0,
+  backend_id INTEGER, -- Backend-assigned ID after sync
+  lo_phone TEXT -- Liaison Officer phone number
 );
 ```
 
@@ -119,18 +145,19 @@ CREATE TABLE mpr (
 ```sql
 CREATE TABLE fp (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  centreName TEXT NOT NULL,
-  centreCode TEXT NOT NULL,
-  panelSize INTEGER NOT NULL,
-  mprCollected INTEGER NOT NULL,
-  notCollected INTEGER NOT NULL,
-  withPurchaseData INTEGER NOT NULL,
-  nilMPRs INTEGER NOT NULL,
-  nilSerialNos INTEGER NOT NULL,
+  centre_name TEXT NOT NULL,
+  centre_code TEXT NOT NULL,
+  panel_size INTEGER NOT NULL,
+  mpr_collected INTEGER NOT NULL,
+  not_collected INTEGER NOT NULL,
+  with_purchase_data INTEGER NOT NULL,
+  nil_mprs INTEGER NOT NULL,
+  nil_serial_nos INTEGER NOT NULL,
   latitude REAL NOT NULL,
   longitude REAL NOT NULL,
-  createdAt TEXT NOT NULL,
-  isSynced INTEGER NOT NULL DEFAULT 0
+  created_at TEXT NOT NULL,
+  is_synced INTEGER NOT NULL DEFAULT 0,
+  backend_id INTEGER -- Backend-assigned ID after sync
 );
 ```
 
@@ -171,6 +198,7 @@ dependencies:
 - **Comprehensive Logging**: All submissions logged with timestamps
 - **Error Handling**: Detailed error responses
 - **Health Checks**: API health monitoring endpoints
+- **Update Support**: PUT endpoints for editing existing records
 
 ### API Endpoints
 
@@ -178,34 +206,43 @@ dependencies:
 |--------|----------|-------------|
 | `GET` | `/api/v1/ping` | Health check |
 | `POST` | `/api/v1/dpr` | Create DPR record |
+| `PUT` | `/api/v1/dpr/{dpr_id}` | Update DPR record |
 | `POST` | `/api/v1/mpr` | Create MPR record |
+| `PUT` | `/api/v1/mpr/{mpr_id}` | Update MPR record |
 | `POST` | `/api/v1/fp` | Create FP record |
+| `GET` | `/api/v1/dpr` | Get all DPR records |
+| `GET` | `/api/v1/mpr` | Get all MPR records |
+| `GET` | `/api/v1/fp` | Get all FP records |
 | `GET` | `/api/v1/stats` | Database statistics |
 
 ### Database Schema
 
 #### DPR Table
 - `id` (Primary Key)
-- `household_id` (String)
-- `respondent_name` (String)
-- `age` (Integer)
-- `gender` (String)
-- `education` (String)
-- `occupation` (String)
-- `income_level` (String)
+- `name_and_address` (String)
+- `district` (String)
+- `state` (String)
+- `family_size` (Integer)
+- `income_group` (String)
+- `centre_code` (String)
+- `return_no` (String)
+- `month_and_year` (String)
+- `household_members` (JSON)
 - `latitude` (Float)
 - `longitude` (Float)
+- `otp_code` (String)
 - `created_at` (DateTime)
 - `is_synced` (Boolean)
 
 #### MPR Table
 - `id` (Primary Key)
-- `household_id` (String)
-- `purchase_date` (String)
-- `textile_type` (String)
-- `quantity` (Integer)
-- `price` (Float)
-- `purchase_location` (String)
+- `name_and_address` (String)
+- `district` (String)
+- `state` (String)
+- `centre_code` (String)
+- `return_no` (String)
+- `month_and_year` (String)
+- `items` (JSON)
 - `latitude` (Float)
 - `longitude` (Float)
 - `created_at` (DateTime)
@@ -302,6 +339,34 @@ python-multipart==0.0.6
    flutter run
    ```
 
+## 📱 App Screens
+
+### Login Screen
+- **Phone Number Input**: Enter LO's phone number
+- **OTP Verification**: Enter mock OTP (123456)
+- **Session Storage**: Stores LO phone in SharedPreferences
+- **Navigation**: Redirects to Home Screen after login
+
+### Home Screen
+- **Navigation Cards**: DPR, MPR, FP forms
+- **List View Buttons**: View all DPR and MPR entries
+- **Logout Button**: Secure logout functionality
+- **Statistics Display**: Database statistics
+
+### Form Screens
+- **DPR Form**: Complete demographic data collection
+- **MPR Form**: Purchase data with auto-fill from DPR
+- **FP Form**: Summary data collection
+- **GPS Integration**: Automatic location capture
+- **Validation**: Comprehensive form validation
+
+### List Screens
+- **DPR List**: View all DPR entries for current LO
+- **MPR List**: View all MPR entries for current LO
+- **Edit Functionality**: Tap edit icon to modify entries
+- **Permission Checks**: Only owner can edit records
+- **Sync Status**: Visual indicators for sync status
+
 ## 📊 Dashboard Screen
 
 The dashboard provides:
@@ -320,6 +385,7 @@ The dashboard provides:
 3. **Automatic Sync**: Data syncs when internet is restored
 4. **Manual Sync**: Force sync option available
 5. **Conflict Resolution**: Handles sync conflicts gracefully
+6. **Update Support**: PUT requests for editing existing records
 
 ### Sync Process
 
@@ -328,6 +394,7 @@ The dashboard provides:
 3. **Batch Sync**: Unsynced records are sent to backend
 4. **Status Update**: Successfully synced records are marked `isSynced = true`
 5. **Error Handling**: Failed syncs are retried automatically
+6. **Update Handling**: Differentiates between new and updated records
 
 ## 🧪 Testing
 
@@ -344,23 +411,44 @@ python test_api.py
 flutter test
 ```
 
+### API Testing
+
+```bash
+# Test deployed API
+python test_deployed_api.py
+```
+
 ## 📱 Screenshots
+
+### Login Screen
+- Clean login interface with phone and OTP inputs
+- Mock OTP verification (123456)
+- Session management
 
 ### Home Screen
 - Navigation cards for DPR, MPR, FP forms
+- List view buttons for viewing entries
+- Logout functionality
 - Database statistics display
-- Sync status indicator
 
 ### Form Screens
 - Clean, intuitive form interfaces
 - GPS location capture
 - Digital signature pad (DPR)
 - Mock OTP verification (DPR)
+- Auto-fill functionality (MPR from DPR)
+
+### List Screens
+- Comprehensive list of all entries
+- Edit functionality with permission checks
+- Sync status indicators
+- LO-specific data filtering
 
 ### Dashboard Screen
 - Statistics overview
 - Line chart for MPR submissions
 - Last sync time display
+- Real-time data updates
 
 ## 🔧 Development
 
@@ -368,41 +456,48 @@ flutter test
 
 ```
 lib/
-├── main.dart              # App entry point
+├── main.dart              # App entry point with AuthWrapper
 ├── models/               # Data models
-│   ├── dpr.dart         # DPR data model
-│   ├── mpr.dart         # MPR data model
+│   ├── dpr.dart         # DPR data model with loPhone
+│   ├── mpr.dart         # MPR data model with loPhone
 │   └── fp.dart          # FP data model
 ├── screens/             # UI screens
-│   ├── home_screen.dart # Main navigation
-│   ├── dpr_form.dart   # DPR form
-│   ├── mpr_form.dart   # MPR form
+│   ├── login_screen.dart # OTP-based login
+│   ├── home_screen.dart # Main navigation with logout
+│   ├── dpr_form.dart   # DPR form with editing
+│   ├── mpr_form.dart   # MPR form with auto-fill
 │   ├── fp_form.dart    # FP form
+│   ├── dpr_list.dart   # DPR list with edit functionality
+│   ├── mpr_list.dart   # MPR list with edit functionality
 │   └── dashboard_screen.dart # Statistics dashboard
 └── services/           # Business logic
-    ├── db_service.dart # Database operations
-    ├── api_service.dart # API communication
-    └── sync_service.dart # Sync management
+    ├── db_service.dart # Database operations with LO filtering
+    ├── api_service.dart # API communication with update support
+    └── sync_service.dart # Sync management with update handling
 ```
 
 ### Key Features
 
-- **Modular Architecture**: Clean separation of concerns
-- **Provider Pattern**: State management
-- **Offline Support**: Works without internet
-- **Location Services**: GPS coordinate capture
-- **Data Validation**: Form input validation
-- **Error Handling**: Comprehensive error management
+- **🔐 Authentication**: OTP-based login system
+- **📱 Offline Support**: Works without internet
+- **📍 Location Services**: GPS coordinate capture
+- **📝 Data Validation**: Comprehensive form validation
+- **🔄 Sync Management**: Automatic and manual sync
+- **📋 List Views**: View and edit all entries
+- **🔒 Permission Control**: LO-specific data access
+- **📊 Statistics**: Real-time data visualization
+- **🔄 Auto-Fill**: MPR form auto-fills from DPR data
 
 ## 🚀 Deployment
 
 ### Backend Deployment
 
-1. **Production Database**: Configure PostgreSQL
-2. **Environment Variables**: Set production settings
-3. **CORS Configuration**: Restrict origins
-4. **SSL Certificate**: Configure HTTPS
-5. **Monitoring**: Add application monitoring
+The backend is deployed on Render with:
+- **Automatic Deployment**: Git push triggers deployment
+- **Health Monitoring**: Automatic health checks
+- **HTTPS Support**: Secure connections
+- **Database Persistence**: SQLite with PostgreSQL option
+- **API Documentation**: Swagger UI available
 
 ### Mobile App Deployment
 
@@ -433,3 +528,5 @@ For technical support or questions:
 ---
 
 **eMTC Project** - Modernizing data collection for the Textiles Committee, Government of India. 
+
+**Current Status**: ✅ Fully functional with LO access control, offline-first design, and comprehensive data synchronization. 

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/dpr.dart';
 import '../services/db_service.dart';
-import 'dpr_form.dart';
+import 'dpr_form.dart'; // Import DPRFormScreen for editing
 
 class DPRListScreen extends StatefulWidget {
   const DPRListScreen({super.key});
-
   @override
   State<DPRListScreen> createState() => _DPRListScreenState();
 }
@@ -14,22 +14,47 @@ class DPRListScreen extends StatefulWidget {
 class _DPRListScreenState extends State<DPRListScreen> {
   List<DPR> _dprList = [];
   bool _isLoading = true;
+  String? _currentLoPhone;
 
   @override
   void initState() {
     super.initState();
-    _loadDPRs();
+    _loadCurrentLoAndDPRs();
+  }
+
+  Future<void> _loadCurrentLoAndDPRs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _currentLoPhone = prefs.getString('lo_phone');
+      
+      if (_currentLoPhone != null) {
+        await _loadDPRs();
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please login first'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   Future<void> _loadDPRs() async {
-    setState(() {
-      _isLoading = true;
-    });
-
+    if (_currentLoPhone == null) return;
+    
     try {
       final dbService = Provider.of<DatabaseService>(context, listen: false);
-      final dprs = await dbService.getAllDPR();
-      
+      final dprs = await dbService.getDPRsByLo(_currentLoPhone!);
       setState(() {
         _dprList = dprs;
         _isLoading = false;
@@ -38,24 +63,38 @@ class _DPRListScreenState extends State<DPRListScreen> {
       setState(() {
         _isLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading DPR records: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading DPRs: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
-  void _editDPR(DPR dpr) {
+  void _editDPR(DPR dpr) async {
+    // Check if current LO owns this record
+    if (_currentLoPhone != null && dpr.loPhone != _currentLoPhone) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('You can only edit records you created'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => DPRFormScreen(editingDPR: dpr),
+        builder: (context) => DPRFormScreen(editingDPR: dpr), // Pass DPR for editing
       ),
     ).then((_) {
-      // Refresh the list when returning from edit
-      _loadDPRs();
+      _loadDPRs(); // Refresh list on return
     });
   }
 
@@ -145,7 +184,7 @@ class _DPRListScreenState extends State<DPRListScreen> {
                               ),
                               IconButton(
                                 onPressed: () => _editDPR(dpr),
-                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                icon: const Icon(Icons.edit, color: Color(0xFFD84315)),
                                 tooltip: 'Edit DPR',
                               ),
                             ],

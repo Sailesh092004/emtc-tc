@@ -11,7 +11,7 @@ import '../models/fp.dart';
 class DatabaseService extends ChangeNotifier {
   static Database? _database;
   static const String _databaseName = 'mtc_nanna.db';
-  static const int _databaseVersion = 4; // Increment version for schema changes
+  static const int _databaseVersion = 5; // Increment version for lo_phone column
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -44,13 +44,15 @@ class DatabaseService extends ChangeNotifier {
         centreCode TEXT NOT NULL,
         returnNo TEXT NOT NULL,
         monthAndYear TEXT NOT NULL,
+        mobileNumber TEXT NOT NULL,
         householdMembers TEXT NOT NULL,
         latitude REAL NOT NULL,
         longitude REAL NOT NULL,
         otpCode TEXT NOT NULL,
         createdAt TEXT NOT NULL,
         isSynced INTEGER NOT NULL DEFAULT 0,
-        backendId INTEGER
+        backendId INTEGER,
+        lo_phone TEXT
       )
     ''');
 
@@ -73,7 +75,8 @@ class DatabaseService extends ChangeNotifier {
         otpCode TEXT NOT NULL,
         createdAt TEXT NOT NULL,
         isSynced INTEGER NOT NULL DEFAULT 0,
-        backendId INTEGER
+        backendId INTEGER,
+        lo_phone TEXT
       )
     ''');
 
@@ -177,6 +180,12 @@ class DatabaseService extends ChangeNotifier {
       await db.execute('ALTER TABLE mpr ADD COLUMN backendId INTEGER');
       await db.execute('ALTER TABLE fp ADD COLUMN backendId INTEGER');
     }
+    
+    if (oldVersion < 5) {
+      // Version 5: Add lo_phone column for LO access control
+      await db.execute('ALTER TABLE dpr ADD COLUMN lo_phone TEXT');
+      await db.execute('ALTER TABLE mpr ADD COLUMN lo_phone TEXT');
+    }
   }
 
   // DPR CRUD Operations
@@ -197,6 +206,7 @@ class DatabaseService extends ChangeNotifier {
       'centreCode': dpr.centreCode,
       'returnNo': dpr.returnNo,
       'monthAndYear': dpr.monthAndYear,
+      'mobileNumber': dpr.mobileNumber,
       'householdMembers': householdMembersJson,
       'latitude': dpr.latitude,
       'longitude': dpr.longitude,
@@ -204,6 +214,7 @@ class DatabaseService extends ChangeNotifier {
       'createdAt': dpr.createdAt.toIso8601String(),
       'isSynced': 0,
       'backendId': dpr.backendId,
+      'lo_phone': dpr.loPhone,
     };
     
     final id = await db.insert('dpr', data);
@@ -291,6 +302,18 @@ class DatabaseService extends ChangeNotifier {
     return DPR.fromMap(maps.first);
   }
 
+  // Get DPRs by LO phone number for access control
+  Future<List<DPR>> getDPRsByLo(String loPhone) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'dpr',
+      where: 'lo_phone = ?',
+      whereArgs: [loPhone],
+      orderBy: 'createdAt DESC',
+    );
+    return List.generate(maps.length, (i) => DPR.fromMap(maps[i]));
+  }
+
   // Update DPR record
   Future<void> updateDPR(DPR dpr) async {
     final db = await database;
@@ -316,6 +339,7 @@ class DatabaseService extends ChangeNotifier {
       'createdAt': dpr.createdAt.toIso8601String(),
       'isSynced': 0, // Mark as unsynced when updated
       'backendId': dpr.backendId,
+      'lo_phone': dpr.loPhone,
     };
     
     await db.update(
@@ -353,6 +377,7 @@ class DatabaseService extends ChangeNotifier {
       'createdAt': mpr.createdAt.toIso8601String(),
       'isSynced': 0, // Mark as unsynced when updated
       'backendId': mpr.backendId,
+      'lo_phone': mpr.loPhone,
     };
     
     await db.update(
@@ -390,6 +415,7 @@ class DatabaseService extends ChangeNotifier {
       'createdAt': mpr.createdAt.toIso8601String(),
       'isSynced': 0,
       'backendId': mpr.backendId,
+      'lo_phone': mpr.loPhone,
     };
     
     final id = await db.insert('mpr', data);
@@ -410,6 +436,18 @@ class DatabaseService extends ChangeNotifier {
       where: 'isSynced = ?',
       whereArgs: [0],
       orderBy: 'createdAt ASC',
+    );
+    return List.generate(maps.length, (i) => MPR.fromMap(maps[i]));
+  }
+
+  // Get MPRs by LO phone number for access control
+  Future<List<MPR>> getMPRsByLo(String loPhone) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'mpr',
+      where: 'lo_phone = ?',
+      whereArgs: [loPhone],
+      orderBy: 'createdAt DESC',
     );
     return List.generate(maps.length, (i) => MPR.fromMap(maps[i]));
   }
