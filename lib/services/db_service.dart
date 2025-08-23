@@ -6,12 +6,13 @@ import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
 import '../models/dpr.dart';
 import '../models/mpr.dart';
-import '../models/fp.dart';
+
+import '../models/backup_catalog.dart';
 
 class DatabaseService extends ChangeNotifier {
   static Database? _database;
   static const String _databaseName = 'mtc_nanna.db';
-  static const int _databaseVersion = 5; // Increment version for lo_phone column
+  static const int _databaseVersion = 7; // Increment version for FP handoff tables
 
   Future<Database> get database async {
     if (_database != null) return _database!;
@@ -98,6 +99,71 @@ class DatabaseService extends ChangeNotifier {
         isSynced INTEGER NOT NULL DEFAULT 0
       )
     ''');
+
+    // ForwardingProformaDrafts table
+    await db.execute('''
+      CREATE TABLE forwarding_proforma_drafts (
+        draft_key TEXT PRIMARY KEY,
+        fp_data TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
+
+    // ForwardingProformaSubmissions table
+    await db.execute('''
+      CREATE TABLE forwarding_proforma_submissions (
+        submission_key TEXT PRIMARY KEY,
+        center_code TEXT NOT NULL,
+        period_id TEXT NOT NULL,
+        lo_id TEXT NOT NULL,
+        package_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        server_hashes TEXT NOT NULL,
+        submitted_at TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    // MprAuditRecords table
+    await db.execute('''
+      CREATE TABLE mpr_audit_records (
+        mpr_id INTEGER NOT NULL,
+        center_code TEXT NOT NULL,
+        period_id TEXT NOT NULL,
+        lo_id TEXT NOT NULL,
+        mpr_data_hash TEXT NOT NULL,
+        submitted_at TEXT NOT NULL,
+        package_id TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    ''');
+    
+    // Backups table
+    await db.execute('''
+      CREATE TABLE backups (
+        id TEXT PRIMARY KEY,
+        center_code TEXT NOT NULL,
+        period_id TEXT NOT NULL,
+        lo_id TEXT NOT NULL,
+        version INTEGER NOT NULL,
+        path TEXT NOT NULL,
+        sha256 TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        state TEXT NOT NULL,
+        retention_days INTEGER NOT NULL,
+        encrypted INTEGER NOT NULL,
+        package_id TEXT,
+        server_hashes TEXT,
+        submitted_at TEXT,
+        UNIQUE(center_code, period_id, lo_id, version)
+      )
+    ''');
+    
+    // Create index for backup queries
+    await db.execute('CREATE INDEX idx_backups_lookup ON backups(center_code, period_id, lo_id)');
+    await db.execute('CREATE INDEX idx_backups_state ON backups(state)');
+    await db.execute('CREATE INDEX idx_backups_created ON backups(created_at)');
   }
 
   void _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -185,6 +251,71 @@ class DatabaseService extends ChangeNotifier {
       // Version 5: Add lo_phone column for LO access control
       await db.execute('ALTER TABLE dpr ADD COLUMN lo_phone TEXT');
       await db.execute('ALTER TABLE mpr ADD COLUMN lo_phone TEXT');
+    }
+
+    if (oldVersion < 6) {
+      // Version 6: Add new FP handoff tables
+      await db.execute('''
+        CREATE TABLE forwarding_proforma_drafts (
+          draft_key TEXT PRIMARY KEY,
+          fp_data TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE forwarding_proforma_submissions (
+          submission_key TEXT PRIMARY KEY,
+          center_code TEXT NOT NULL,
+          period_id TEXT NOT NULL,
+          lo_id TEXT NOT NULL,
+          package_id TEXT NOT NULL,
+          status TEXT NOT NULL,
+          server_hashes TEXT NOT NULL,
+          submitted_at TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+      await db.execute('''
+        CREATE TABLE mpr_audit_records (
+          mpr_id INTEGER NOT NULL,
+          center_code TEXT NOT NULL,
+          period_id TEXT NOT NULL,
+          lo_id TEXT NOT NULL,
+          mpr_data_hash TEXT NOT NULL,
+          submitted_at TEXT NOT NULL,
+          package_id TEXT NOT NULL,
+          created_at TEXT NOT NULL
+        )
+      ''');
+    }
+    
+    if (oldVersion < 7) {
+      // Version 7: Add backup catalog table
+      await db.execute('''
+        CREATE TABLE backups (
+          id TEXT PRIMARY KEY,
+          center_code TEXT NOT NULL,
+          period_id TEXT NOT NULL,
+          lo_id TEXT NOT NULL,
+          version INTEGER NOT NULL,
+          path TEXT NOT NULL,
+          sha256 TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          state TEXT NOT NULL,
+          retention_days INTEGER NOT NULL,
+          encrypted INTEGER NOT NULL,
+          package_id TEXT,
+          server_hashes TEXT,
+          submitted_at TEXT,
+          UNIQUE(center_code, period_id, lo_id, version)
+        )
+      ''');
+      
+      // Create index for backup queries
+      await db.execute('CREATE INDEX idx_backups_lookup ON backups(center_code, period_id, lo_id)');
+      await db.execute('CREATE INDEX idx_backups_state ON backups(state)');
+      await db.execute('CREATE INDEX idx_backups_created ON backups(created_at)');
     }
   }
 
@@ -302,6 +433,36 @@ class DatabaseService extends ChangeNotifier {
     return DPR.fromMap(maps.first);
   }
 
+  // Get DPR for MPR form (with caching)
+  Future<Map<String, dynamic>?> getDprFor(String centerId, String householdId) async {
+    final db = await database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'dpr',
+      where: 'centreCode = ? AND returnNo = ?',
+      whereArgs: [centerId, householdId],
+      limit: 1,
+    );
+    
+    if (maps.isEmpty) {
+      return null;
+    }
+    
+    final dpr = DPR.fromMap(maps.first);
+    return {
+      'id': dpr.id,
+      'centreCode': dpr.centreCode,
+      'returnNo': dpr.returnNo,
+      'members': dpr.householdMembers.map((m) => m.toMap()).toList(),
+    };
+  }
+
+  // Cache DPR data for MPR form
+  Future<void> cacheDprFor(String centerId, String householdId, Map<String, dynamic> dprJson) async {
+    // This method is for future use when we implement caching from API
+    // For now, we rely on the existing database
+    print('Caching DPR data for $centerId/$householdId: $dprJson');
+  }
+
   // Get DPRs by LO phone number for access control
   Future<List<DPR>> getDPRsByLo(String loPhone) async {
     final db = await database;
@@ -348,6 +509,42 @@ class DatabaseService extends ChangeNotifier {
       where: 'id = ?',
       whereArgs: [dpr.id],
     );
+    notifyListeners();
+  }
+
+  // Upsert DPR members - update existing or insert new
+  Future<void> upsertMembers(int dprId, List<HouseholdMember> members) async {
+    final db = await database;
+    
+    // Get existing DPR
+    final List<Map<String, dynamic>> maps = await db.query(
+      'dpr',
+      where: 'id = ?',
+      whereArgs: [dprId],
+      limit: 1,
+    );
+    
+    if (maps.isEmpty) {
+      throw Exception('DPR not found with ID: $dprId');
+    }
+    
+    // Convert members to JSON string
+    final membersJson = jsonEncode(
+      members.map((member) => member.toMap()).toList()
+    );
+    
+    // Update the householdMembers field
+    await db.update(
+      'dpr',
+      {
+        'householdMembers': membersJson,
+        'familySize': members.length,
+        'isSynced': 0, // Mark as unsynced when updated
+      },
+      where: 'id = ?',
+      whereArgs: [dprId],
+    );
+    
     notifyListeners();
   }
 
@@ -523,75 +720,162 @@ class DatabaseService extends ChangeNotifier {
     return result;
   }
 
-  // FP CRUD Operations
-  Future<int> insertFP(FP fp) async {
-    final db = await database;
-    final id = await db.insert('fp', fp.toMap());
-    notifyListeners();
-    return id;
-  }
 
-  Future<List<FP>> getAllFP() async {
-    final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query('fp', orderBy: 'createdAt DESC');
-    return List.generate(maps.length, (i) => FP.fromMap(maps[i]));
-  }
 
-  Future<List<FP>> getUnsyncedFP() async {
+  // ForwardingProforma (FP) Operations
+  Future<void> saveForwardingProformaDraft(Map<String, dynamic> fpData) async {
     final db = await database;
-    final List<Map<String, dynamic>> maps = await db.query(
-      'fp',
-      where: 'isSynced = ?',
-      whereArgs: [0],
-      orderBy: 'createdAt ASC',
-    );
-    return List.generate(maps.length, (i) => FP.fromMap(maps[i]));
-  }
-
-  Future<void> updateFPSyncStatus(int id, bool isSynced) async {
-    final db = await database;
-    await db.update(
-      'fp',
-      {'isSynced': isSynced ? 1 : 0},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
+    final key = '${fpData['centerCode']}_${fpData['periodId']}_${fpData['loId']}';
+    
+    await db.execute('''
+      INSERT OR REPLACE INTO forwarding_proforma_drafts (
+        draft_key, fp_data, created_at, updated_at
+      ) VALUES (?, ?, ?, ?)
+    ''', [
+      key,
+      jsonEncode(fpData),
+      DateTime.now().toIso8601String(),
+      DateTime.now().toIso8601String(),
+    ]);
+    
     notifyListeners();
   }
 
-  Future<void> updateFPBackendId(int id, int backendId) async {
+  Future<Map<String, dynamic>?> getForwardingProformaDraft(String centerCode, String periodId, String loId) async {
     final db = await database;
-    await db.update(
-      'fp',
-      {'backendId': backendId},
-      where: 'id = ?',
-      whereArgs: [id],
+    final key = '${centerCode}_${periodId}_${loId}';
+    
+    final result = await db.query(
+      'forwarding_proforma_drafts',
+      where: 'draft_key = ?',
+      whereArgs: [key],
     );
+    
+    if (result.isNotEmpty) {
+      return jsonDecode(result.first['fp_data'] as String);
+    }
+    return null;
+  }
+
+  Future<void> markForwardingProformaSubmitted(String centerCode, String periodId, String loId, Map<String, dynamic> submitResult) async {
+    final db = await database;
+    final key = '${centerCode}_${periodId}_${loId}';
+    
+    await db.execute('''
+      INSERT OR REPLACE INTO forwarding_proforma_submissions (
+        submission_key, center_code, period_id, lo_id, package_id, status, 
+        server_hashes, submitted_at, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', [
+      key,
+      centerCode,
+      periodId,
+      loId,
+      submitResult['packageId'],
+      submitResult['status'],
+      jsonEncode(submitResult['serverHashes']),
+      submitResult['submittedAt'],
+      DateTime.now().toIso8601String(),
+    ]);
+    
     notifyListeners();
   }
 
-  Future<void> deleteFP(int id) async {
+  Future<void> cleanupLocalMprsAfterSubmit(String centerCode, String periodId, String loId) async {
     final db = await database;
+    
+    // Get MPRs for this center and period
+    final mprs = await db.query(
+      'mpr',
+      where: 'centreCode = ? AND monthAndYear = ?',
+      whereArgs: [centerCode, periodId],
+    );
+    
+    // Create audit records before deletion
+    for (final mpr in mprs) {
+      await db.execute('''
+        INSERT INTO mpr_audit_records (
+          mpr_id, center_code, period_id, lo_id, mpr_data_hash, 
+          submitted_at, package_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ''', [
+        mpr['id'],
+        centerCode,
+        periodId,
+        loId,
+        mpr['items'], // Use items as hash for now
+        DateTime.now().toIso8601String(),
+        'PENDING', // Will be updated with actual package ID
+        DateTime.now().toIso8601String(),
+      ]);
+    }
+    
+    // Delete local MPR entries
     await db.delete(
-      'fp',
-      where: 'id = ?',
-      whereArgs: [id],
+      'mpr',
+      where: 'centreCode = ? AND monthAndYear = ?',
+      whereArgs: [centerCode, periodId],
     );
+    
     notifyListeners();
   }
 
-  Future<int> getFPCount() async {
+  Future<List<Map<String, dynamic>>> getMprsForPeriod(String centerCode, String periodId) async {
     final db = await database;
-    final result = await db.rawQuery('SELECT COUNT(*) as count FROM fp');
-    return Sqflite.firstIntValue(result) ?? 0;
+    
+    final result = await db.query(
+      'mpr',
+      where: 'centreCode = ? AND monthAndYear = ?',
+      whereArgs: [centerCode, periodId],
+    );
+    
+    return result;
   }
 
-  Future<int> getUnsyncedFPCount() async {
+  Future<Map<String, dynamic>?> getDprForCenter(String centerCode) async {
     final db = await database;
-    final result = await db.rawQuery(
-      'SELECT COUNT(*) as count FROM fp WHERE isSynced = 0'
+    
+    final result = await db.query(
+      'dpr',
+      where: 'centreCode = ?',
+      whereArgs: [centerCode],
+      limit: 1,
     );
-    return Sqflite.firstIntValue(result) ?? 0;
+    
+    if (result.isNotEmpty) {
+      return result.first;
+    }
+    return null;
+  }
+
+  Future<List<Map<String, dynamic>>> getDprMembersForCenter(String centerCode) async {
+    final db = await database;
+    
+    final result = await db.query(
+      'dpr',
+      where: 'centreCode = ?',
+      whereArgs: [centerCode],
+    );
+    
+    final members = <Map<String, dynamic>>[];
+    for (final dpr in result) {
+      if (dpr['householdMembers'] != null) {
+        final householdMembers = jsonDecode(dpr['householdMembers'] as String);
+        if (householdMembers is List) {
+          for (final member in householdMembers) {
+            if (member is Map<String, dynamic>) {
+              members.add({
+                ...member,
+                'returnNo': dpr['returnNo'],
+                'centerCode': centerCode,
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    return members;
   }
 
   // Database statistics
@@ -600,16 +884,11 @@ class DatabaseService extends ChangeNotifier {
     final unsyncedDprCount = await getUnsyncedDPRCount();
     final mprCount = await getMPRCount();
     final unsyncedMprCount = await getUnsyncedMPRCount();
-    final fpCount = await getFPCount();
-    final unsyncedFpCount = await getUnsyncedFPCount();
-    
     return {
       'totalDPR': dprCount,
       'unsyncedDPR': unsyncedDprCount,
       'totalMPR': mprCount,
       'unsyncedMPR': unsyncedMprCount,
-      'totalFP': fpCount,
-      'unsyncedFP': unsyncedFpCount,
     };
   }
 
@@ -617,5 +896,127 @@ class DatabaseService extends ChangeNotifier {
   Future<void> close() async {
     final db = await database;
     await db.close();
+  }
+
+  // ===== BACKUP CATALOG OPERATIONS =====
+  
+  Future<void> insertBackupEntry(BackupEntry backup) async {
+    final db = await database;
+    await db.insert('backups', backup.toJson());
+    notifyListeners();
+  }
+
+  Future<void> updateBackupEntry(BackupEntry backup) async {
+    final db = await database;
+    await db.update(
+      'backups',
+      backup.toJson(),
+      where: 'id = ?',
+      whereArgs: [backup.id],
+    );
+    notifyListeners();
+  }
+
+  Future<BackupEntry?> getBackupEntry(String id) async {
+    final db = await database;
+    final result = await db.query(
+      'backups',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    
+    if (result.isNotEmpty) {
+      return BackupEntry.fromJson(result.first);
+    }
+    return null;
+  }
+
+  Future<List<BackupEntry>> getBackupsForHandoff({
+    String? centerCode,
+    String? periodId,
+    String? loId,
+  }) async {
+    final db = await database;
+    
+    String whereClause = '';
+    List<Object> whereArgs = [];
+    
+    if (centerCode != null) {
+      whereClause += 'center_code = ?';
+      whereArgs.add(centerCode);
+    }
+    
+    if (periodId != null) {
+      if (whereClause.isNotEmpty) whereClause += ' AND ';
+      whereClause += 'period_id = ?';
+      whereArgs.add(periodId);
+    }
+    
+    if (loId != null) {
+      if (whereClause.isNotEmpty) whereClause += ' AND ';
+      whereClause += 'lo_id = ?';
+      whereArgs.add(loId);
+    }
+    
+    final result = await db.query(
+      'backups',
+      where: whereClause.isEmpty ? null : whereClause,
+      whereArgs: whereArgs.isEmpty ? null : whereArgs,
+      orderBy: 'version DESC, created_at DESC',
+    );
+    
+    return result.map((map) => BackupEntry.fromJson(map)).toList();
+  }
+
+  Future<List<BackupEntry>> getBackupsByState(String state) async {
+    final db = await database;
+    final result = await db.query(
+      'backups',
+      where: 'state = ?',
+      whereArgs: [state],
+      orderBy: 'created_at ASC',
+    );
+    
+    return result.map((map) => BackupEntry.fromJson(map)).toList();
+  }
+
+  Future<void> deleteBackupEntry(String id) async {
+    final db = await database;
+    await db.delete(
+      'backups',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    notifyListeners();
+  }
+
+  Future<void> purgeExpiredBackups() async {
+    final db = await database;
+    
+    // Get current timestamp
+    final now = DateTime.now();
+    
+    // Find backups that are ACKED and older than their retention period
+    final expiredBackups = await db.rawQuery('''
+      SELECT id FROM backups 
+      WHERE state = 'ACKED' 
+      AND datetime(created_at) < datetime(?, '-' || retention_days || ' days')
+    ''', [now.toIso8601String()]);
+    
+    // Delete expired backups
+    for (final backup in expiredBackups) {
+      final backupId = backup['id'] as String;
+      await deleteBackupEntry(backupId);
+      
+      // Also delete the actual backup file
+      // TODO: Implement file deletion
+    }
+  }
+
+  Future<int> getBackupCount() async {
+    final db = await database;
+    final result = await db.rawQuery('SELECT COUNT(*) as count FROM backups');
+    return Sqflite.firstIntValue(result) ?? 0;
   }
 } 

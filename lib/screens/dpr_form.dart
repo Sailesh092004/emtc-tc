@@ -32,7 +32,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   final _mobileNumberController = TextEditingController();
   final _otpController = TextEditingController();
 
-  // Household Members (up to 8)
+  // Household Members
   final List<HouseholdMemberForm> _householdMembers = [];
 
   // Location data
@@ -52,11 +52,16 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     super.initState();
     _getCurrentLocation();
     _monthAndYearController.text = '${DateTime.now().month}/${DateTime.now().year}';
-    _addHouseholdMember(); // Add first member by default
+    
+    // Add listener to family size field for auto-creation of members
+    _familySizeController.addListener(_onFamilySizeChanged);
     
     // If editing, populate the form with existing data
     if (widget.editingDPR != null) {
       _populateFormWithDPR(widget.editingDPR!);
+    } else {
+      // Add first member by default for new forms
+      _addHouseholdMember();
     }
   }
 
@@ -65,6 +70,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     _nameAndAddressController.dispose();
     _districtController.dispose();
     _stateController.dispose();
+    _familySizeController.removeListener(_onFamilySizeChanged);
     _familySizeController.dispose();
     _incomeGroupController.dispose();
     _centreCodeController.dispose();
@@ -345,18 +351,9 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
   }
 
   void _addHouseholdMember() {
-    if (_householdMembers.length < 8) {
-      setState(() {
-        _householdMembers.add(HouseholdMemberForm());
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Maximum 8 household members allowed'),
-          backgroundColor: Colors.orange,
-        ),
-      );
-    }
+    setState(() {
+      _householdMembers.add(HouseholdMemberForm());
+    });
   }
 
   void _removeHouseholdMember(int index) {
@@ -371,6 +368,28 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
     final otherIncome = double.tryParse(member.annualIncomeOtherController.text) ?? 0.0;
     final total = jobIncome + otherIncome;
     member.totalIncomeController.text = total.toStringAsFixed(2);
+  }
+
+  void _onFamilySizeChanged() {
+    final familySize = int.tryParse(_familySizeController.text);
+    if (familySize != null && familySize > 0) {
+      _adjustMemberCount(familySize);
+    }
+  }
+
+  void _adjustMemberCount(int targetCount) {
+    setState(() {
+      // Remove excess members if current count is more than target
+      while (_householdMembers.length > targetCount) {
+        final member = _householdMembers.removeLast();
+        member.dispose();
+      }
+      
+      // Add new members if current count is less than target
+      while (_householdMembers.length < targetCount) {
+        _householdMembers.add(HouseholdMemberForm());
+      }
+    });
   }
 
   void _populateFormWithDPR(DPR dpr) {
@@ -437,6 +456,28 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
       return;
     }
 
+    // Validate that member count matches family size
+    final familySize = int.tryParse(_familySizeController.text);
+    if (familySize == null || familySize <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enter a valid family size'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    if (_householdMembers.length != familySize) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Number of household members (${_householdMembers.length}) must match family size ($familySize)'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _isSubmitting = true;
     });
@@ -448,16 +489,16 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
 
       // Convert form data to HouseholdMember objects
       final members = _householdMembers.map((form) => HouseholdMember(
-        name: form.nameController.text,
-        relationshipWithHead: form.relationshipController.text,
-        gender: form.genderController.text,
-        age: int.parse(form.ageController.text),
-        education: form.educationController.text,
-        occupation: form.occupationController.text,
-        annualIncomeJob: double.parse(form.annualIncomeJobController.text),
-        annualIncomeOther: double.parse(form.annualIncomeOtherController.text),
-        otherIncomeSource: form.otherIncomeSourceController.text,
-        totalIncome: double.parse(form.totalIncomeController.text),
+        name: form.nameController.text.isNotEmpty ? form.nameController.text : 'Member',
+        relationshipWithHead: form.relationshipController.text.isNotEmpty ? form.relationshipController.text : '',
+        gender: form.genderController.text.isNotEmpty ? form.genderController.text : '',
+        age: int.tryParse(form.ageController.text) ?? 0,
+        education: form.educationController.text.isNotEmpty ? form.educationController.text : '',
+        occupation: form.occupationController.text.isNotEmpty ? form.occupationController.text : '',
+        annualIncomeJob: double.tryParse(form.annualIncomeJobController.text) ?? 0.0,
+        annualIncomeOther: double.tryParse(form.annualIncomeOtherController.text) ?? 0.0,
+        otherIncomeSource: form.otherIncomeSourceController.text.isNotEmpty ? form.otherIncomeSourceController.text : '',
+        totalIncome: double.tryParse(form.totalIncomeController.text) ?? 0.0,
       )).toList();
 
       final dpr = DPR(
@@ -487,6 +528,9 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
           backendId: widget.editingDPR!.backendId,
         );
         await dbService.updateDPR(updatedDPR);
+        
+        // Also update members separately using upsertMembers
+        await dbService.upsertMembers(widget.editingDPR!.id!, members);
         
         setState(() {
           _isSubmitting = false;
@@ -653,22 +697,33 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
               ),
             ),
             const SizedBox(width: 16),
-                         Expanded(
-               child: TextFormField(
-                 controller: _incomeGroupController,
-                 decoration: const InputDecoration(
-                   labelText: 'Income Group *',
-                   border: OutlineInputBorder(),
-                   helperText: 'Enter income group code (01-10)',
-                 ),
-                 validator: (value) {
-                   if (value == null || value.isEmpty) {
-                     return 'Please enter income group';
-                   }
-                   return null;
-                 },
-               ),
-             ),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                value: _incomeGroupController.text.isNotEmpty ? _incomeGroupController.text : null,
+                decoration: const InputDecoration(
+                  labelText: 'Income Group *',
+                  border: OutlineInputBorder(),
+                  helperText: 'Select income group',
+                ),
+                items: incomeGroupCodes.entries.map((entry) => 
+                  DropdownMenuItem(
+                    value: entry.key,
+                    child: Text('${entry.key} - ${entry.value}'),
+                  ),
+                ).toList(),
+                onChanged: (value) {
+                  setState(() {
+                    _incomeGroupController.text = value ?? '';
+                  });
+                },
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please select income group';
+                  }
+                  return null;
+                },
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
@@ -734,27 +789,30 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
         Row(
           children: [
                          Expanded(
-               child: TextFormField(
-                 controller: TextEditingController(
-                   text: _monthAndYearController.text.split('/').isNotEmpty ? _monthAndYearController.text.split('/')[0] : DateTime.now().month.toString().padLeft(2, '0')
-                 ),
+               child: DropdownButtonFormField<String>(
+                 value: _monthAndYearController.text.split('/').isNotEmpty ? 
+                   _monthAndYearController.text.split('/')[0].padLeft(2, '0') : null,
                  decoration: const InputDecoration(
                    labelText: 'Month *',
                    border: OutlineInputBorder(),
-                   helperText: 'Enter month (01-12)',
+                   helperText: 'Select month',
                  ),
-                 keyboardType: TextInputType.number,
+                 items: monthCodes.entries.map((entry) => 
+                   DropdownMenuItem(
+                     value: entry.key,
+                     child: Text('${entry.key} - ${entry.value}'),
+                   ),
+                 ).toList(),
                  onChanged: (value) {
-                   final currentYear = _monthAndYearController.text.split('/').length > 1 ? _monthAndYearController.text.split('/')[1] : DateTime.now().year.toString();
-                   _monthAndYearController.text = '$value/$currentYear';
+                   if (value != null) {
+                     final currentYear = _monthAndYearController.text.split('/').length > 1 ? 
+                       _monthAndYearController.text.split('/')[1] : DateTime.now().year.toString();
+                     _monthAndYearController.text = '$value/$currentYear';
+                   }
                  },
                  validator: (value) {
                    if (value == null || value.isEmpty) {
-                     return 'Please enter month';
-                   }
-                   final month = int.tryParse(value);
-                   if (month == null || month < 1 || month > 12) {
-                     return 'Please enter a valid month (01-12)';
+                     return 'Please select month';
                    }
                    return null;
                  },
@@ -802,7 +860,7 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text(
-              'Household Members (Max 8)',
+              'Household Members',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             ElevatedButton.icon(
@@ -873,44 +931,68 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
                           ),
                         ),
                         const SizedBox(width: 16),
-                                                 Expanded(
-                           child: TextFormField(
-                             controller: member.relationshipController,
-                             decoration: const InputDecoration(
-                               labelText: 'Relationship with Head *',
-                               border: OutlineInputBorder(),
-                               helperText: 'Enter relationship code (01-08)',
-                             ),
-                             validator: (value) {
-                               if (value == null || value.isEmpty) {
-                                 return 'Please enter relationship';
-                               }
-                               return null;
-                             },
-                           ),
-                         ),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: member.relationshipController.text.isNotEmpty ? 
+                              member.relationshipController.text : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Relationship with Head *',
+                              border: OutlineInputBorder(),
+                              helperText: 'Select relationship',
+                            ),
+                            items: relationshipCodes.entries.map((entry) => 
+                              DropdownMenuItem(
+                                value: entry.key,
+                                child: Text('${entry.key} - ${entry.value}'),
+                              ),
+                            ).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                member.relationshipController.text = value ?? '';
+                              });
+                            },
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please select relationship';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
 
                     Row(
                       children: [
-                                                 Expanded(
-                           child: TextFormField(
-                             controller: member.genderController,
-                             decoration: const InputDecoration(
-                               labelText: 'Gender *',
-                               border: OutlineInputBorder(),
-                               helperText: 'Enter gender code (M/F/O)',
-                             ),
-                             validator: (value) {
-                               if (value == null || value.isEmpty) {
-                                 return 'Please enter gender';
-                               }
-                               return null;
-                             },
-                           ),
-                         ),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: member.genderController.text.isNotEmpty ? 
+                              member.genderController.text : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Gender *',
+                              border: OutlineInputBorder(),
+                              helperText: 'Select gender',
+                            ),
+                            items: genderCodes.entries.map((entry) => 
+                              DropdownMenuItem(
+                                value: entry.key,
+                                child: Text('${entry.key} - ${entry.value}'),
+                              ),
+                            ).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                member.genderController.text = value ?? '';
+                              });
+                            },
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please select gender';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextFormField(
@@ -942,39 +1024,63 @@ class _DPRFormScreenState extends State<DPRFormScreen> {
 
                     Row(
                       children: [
-                                                 Expanded(
-                           child: TextFormField(
-                             controller: member.educationController,
-                             decoration: const InputDecoration(
-                               labelText: 'Education *',
-                               border: OutlineInputBorder(),
-                               helperText: 'Enter education code (01-10)',
-                             ),
-                             validator: (value) {
-                               if (value == null || value.isEmpty) {
-                                 return 'Please enter education';
-                               }
-                               return null;
-                             },
-                           ),
-                         ),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: member.educationController.text.isNotEmpty ? 
+                              member.educationController.text : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Education *',
+                              border: OutlineInputBorder(),
+                              helperText: 'Select education level',
+                            ),
+                            items: educationCodes.entries.map((entry) => 
+                              DropdownMenuItem(
+                                value: entry.key,
+                                child: Text('${entry.key} - ${entry.value}'),
+                              ),
+                            ).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                member.educationController.text = value ?? '';
+                              });
+                            },
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please select education level';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
                         const SizedBox(width: 16),
-                                                 Expanded(
-                           child: TextFormField(
-                             controller: member.occupationController,
-                             decoration: const InputDecoration(
-                               labelText: 'Occupation *',
-                               border: OutlineInputBorder(),
-                               helperText: 'Enter occupation code (01-14)',
-                             ),
-                             validator: (value) {
-                               if (value == null || value.isEmpty) {
-                                 return 'Please enter occupation';
-                               }
-                               return null;
-                             },
-                           ),
-                         ),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            value: member.occupationController.text.isNotEmpty ? 
+                              member.occupationController.text : null,
+                            decoration: const InputDecoration(
+                              labelText: 'Occupation *',
+                              border: OutlineInputBorder(),
+                              helperText: 'Select occupation',
+                            ),
+                            items: dprOccupationCodes.entries.map((entry) => 
+                              DropdownMenuItem(
+                                value: entry.key,
+                                child: Text('${entry.key} - ${entry.value}'),
+                              ),
+                            ).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                member.occupationController.text = value ?? '';
+                              });
+                            },
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please select occupation';
+                              }
+                              return null;
+                            },
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),

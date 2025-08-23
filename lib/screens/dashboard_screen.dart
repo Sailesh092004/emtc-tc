@@ -93,6 +93,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     _buildSyncStatusSection(),
                     const SizedBox(height: 24),
                     _buildChartSection(),
+                    const SizedBox(height: 24),
+                    _buildFPHandoffSection(),
                   ],
                 ),
               ),
@@ -393,6 +395,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFPHandoffSection() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.handshake, color: Colors.blue[700], size: 24),
+                const SizedBox(width: 8),
+                const Text(
+                  'Forwarding Proforma Handoff',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Manage the handoff of MPR data from Local Officers (LO) to Review Officers (RO) for quality review and approval.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/forwarding-proforma');
+                    },
+                    icon: const Icon(Icons.create),
+                    label: const Text('Create FP'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      // TODO: Navigate to FP list/history
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('FP History coming soon')),
+                      );
+                    },
+                    icon: const Icon(Icons.history),
+                    label: const Text('FP History'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey[600],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),

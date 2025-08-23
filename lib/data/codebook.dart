@@ -1,9 +1,7 @@
-// Code Master Lists for e-MTC TC App
+// Code Master Lists for eMTC App
 // Contains all the standardized codes and their descriptions
 
-// DPR Household Member Codes
-
-// Relationship with Head Codes (Column No. 3 DPR)
+// Relationship Codes (DPR)
 const Map<String, String> relationshipCodes = {
   "01": "Self",
   "02": "Wife",
@@ -125,123 +123,39 @@ const Map<String, String> varietyCodes = {
   "200": "Unspecified Piece length Items"
 };
 
-// Month Codes (01-12)
-const Map<String, String> monthCodes = {
-  "01": "January",
-  "02": "February", 
-  "03": "March",
-  "04": "April",
-  "05": "May",
-  "06": "June",
-  "07": "July",
-  "08": "August",
-  "09": "September",
-  "10": "October",
-  "11": "November",
-  "12": "December"
+// Garment in Piece Length (201-300)
+const Map<String, String> garmentCodes = {
+  "201": "Dhoti, Paradani, Panchi, Dhotar / Bhagwa (M)",
+  "202": "Lungi, Kaile Tehmat / Tolong / Pheichawm (M)",
+  "203": "Turban / Trimmed Turban / Poho / Mureta / Pagdi /Safa (M)",
+  "204": "Angavastram, Uparna (M)",
+  "205": "Wearable Chaddar / Dosuti/ Loi /Braka / Odhana /Borkapor (M)",
+  "206": "Scase",
+  "207": "Stole (M)",
+  "231": "All Sarees of 5.25 meters",
+  "232": "All Sarees With Blouse Piece 6.30 meters",
+  "233": "All Sarees of 8.00 meters",
+  "234": "All Sarees of 8.75 meters with blouse piece",
+  "235": "Chatta (Worn Along with Pavdai) Long Top or Long Blouse",
+  "236": "Set Mundu ( Single Dhoti & Half Saree)",
+  "237": "Set Double Mundu",
+  "238": "Neriyathu / Kavani",
+  "239": "Shawl (M)",
+  "242": "Other Sarees Not Described (F)",
+  "244": "Controlled Dhoti (F)",
+  "253": "Half Saree, Thavani",
+  "277": "Odhani / Parihiya Saree (F)",
+  "278": "Unspecified Garment In Piece length",
+  "279": "Dupatta(F)",
+  "280": "Stole (F)",
+  "282": "Lungi(F)",
+  "283": "Angavastram (Ladies)",
+  "284": "Single Dhoti/Half Dhoti / Kariya (M)",
+  "285": "Rihar (Assamese)"
 };
 
-// Income Group Codes
-const Map<String, String> incomeGroupCodes = {
-  "01": "Up to ₹75,000",
-  "02": "₹75,001 to ₹1,50,000",
-  "03": "₹1,50,001 to ₹3,00,000",
-  "04": "₹3,00,001 to ₹5,00,000",
-  "05": "₹5,00,001 to ₹8,00,000",
-  "06": "₹8,00,001 to ₹12,00,000",
-  "07": "₹12,00,001 to ₹16,00,000",
-  "08": "₹16,00,001 to ₹20,00,000",
-  "09": "₹20,00,001 to ₹25,00,001",
-  "10": "Above ₹25,00,001"
-};
-
-// Occupation Codes
-const Map<String, String> occupationCodes = {
-  "01": "Service Class:- Employed in State/Central Govt. Public Sector Undertaking, Public Limited Company & other Organized Sectors Employed in Private & other Unorganized sectors",
-  "02": "Self Employed",
-  "03": "Business & Trade Petty and Small Scale",
-  "04": "Medium Scale Business Activities",
-  "05": "Large Scale Business Activities and Traders",
-  "06": "Professionals & Affluent Class : Doctors, Lawyers, Engineers, Chartered Accountants, Artists, Architects, Singers, Musicians, Software consultants, MNC Employees etc.",
-  "07": "Agriculture, Horticulture, Fisheries, Pisiculture, Poultry & Cultivators, Dairy & Etc",
-  "08": "Agricultural Labour",
-  "09": "Industrial Labour, Rickshaw Puller, Auto /Taxi Driver, Casual And unorganized Labour etc.",
-  "10": "Others Pensioners, Remittance, Renters (house on rent) etc.",
-  "11": "Housewife",
-  "12": "Student",
-  "13": "Infant",
-  "14": "Un-Employed"
-};
-
-// Fibre Type Codes
-const Map<String, String> fibreCodes = {
-  "01": "Cotton",
-  "02": "Pure Silk",
-  "03": "Woolen",
-  "04": "Polyester",
-  "05": "Nylon",
-  "06": "Acrylic",
-  "07": "Other Synthetic",
-  "08": "Art Silk /Viscose /Rayon",
-  "09": "Cotton Viscose",
-  "10": "Other Natural Fibers",
-  "11": "Polyester Cotton",
-  "12": "Polyester Viscose",
-  "13": "Polyester Woolen",
-  "14": "Polyester Viscose Cotton",
-  "15": "Other Mixed/Other Blends",
-  "16": "Any Other"
-};
-
-// Sector of Manufacture Codes
-const Map<String, String> sectorCodes = {
-  "1": "Mill Made",
-  "2": "Powerloom",
-  "3": "Handloom",
-  "4": "Hosiery/Knitted",
-  "5": "Khadi",
-  "6": "Any Other"
-};
-
-// Colour/Design Codes
-const Map<String, String> colourCodes = {
-  "01": "Plain Colour",
-  "02": "Bleached White",
-  "03": "Stripes",
-  "04": "Checks",
-  "05": "Printed",
-  "06": "Grey",
-  "07": "Floval/Jacquard",
-  "08": "Embroidery",
-  "09": "Patchwork/Other"
-};
-
-// Type of Shop Codes
-const Map<String, String> shopTypeCodes = {
-  "01": "Mill/Company Shop",
-  "02": "Departmental/Co-op Stores/Khadi Bhandar",
-  "03": "Shopping Malls/Exhibitions",
-  "04": "Private Retailer",
-  "05": "Pavement Shops/Hawkers",
-  "06": "E-Shopping/Net Booking",
-  "07": "State Govt. Apex Outlets",
-  "08": "Tailor Cum Retailer",
-  "09": "Brand Outlet",
-  "10": "Any Other"
-};
-
-// Purchase Type Codes
-const Map<String, String> purchaseTypeCodes = {
-  "1": "Piece Length",
-  "2": "Garment in Piece Length",
-  "3": "Woven Readymade",
-  "4": "Household Item",
-  "5": "Knitted/Hosiery",
-  "6": "Non-woven"
-};
-
-// Dress Intended Codes (Woven Readymade Garments)
-const Map<String, String> dressIntendedCodes = {
+// Woven Readymade Garments (401-600)
+const Map<String, String> wovenGarmentCodes = {
   "401": "Full Shirt / Kameez /Sadra (M)",
   "402": "Half Shirt / Bush Shirt/Manila(M)",
   "403": "Bush Coat(M)",
@@ -373,6 +287,112 @@ const Map<String, String> dressIntendedCodes = {
   "577": "Half Shirt (F)",
   "578": "Jacket Half (M)",
   "599": "UNSPECIFIED"
+};
+
+// Woven Household Varieties (601-700)
+const Map<String, String> householdCodes = {
+  "601": "Chaddar-Single /Pechori",
+  "602": "Bed Sheet-Single",
+  "603": "Blanket",
+  "604": "Pillow Cover",
+  "605": "Pillow",
+  "606": "Mattresses/Gaddi",
+  "607": "Satranji/Dari",
+  "608": "Carpet",
+  "609": "Door Curtain",
+  "610": "Suitcase Cover",
+  "611": "Rajai Cover/Quilt Cover/Palli",
+  "612": "Table Cover",
+  "613": "Chair Cover",
+  "614": "Radio Cover",
+  "615": "Sofa Cover",
+  "616": "Tea-Pot Cover",
+  "617": "Deevan Set Covers",
+  "618": "Towel",
+  "619": "Napkin",
+  "620": "Turkish Towel",
+  "621": "Turkish Napkin",
+  "622": "Duster/Jharan",
+  "623": "Cloth Bag",
+  "624": "Mosquito Net",
+  "625": "Hold All",
+  "626": "Purse",
+  "627": "Nada",
+  "628": "Canvas/Duck/Tarpaulin Cover",
+  "629": "Tea-Cosy",
+  "630": "T.V.Cover",
+  "631": "Chaddar (Double)",
+  "632": "Bed Sheet-Double",
+  "633": "Bed Cover-Single",
+  "634": "Bed Cover-Double",
+  "635": "Quilt",
+  "636": "Window Curtain",
+  "637": "Round/Square Pillow Cover",
+  "638": "Sleeping Bag",
+  "639": "Aasan/Namaji Aasan",
+  "640": "Tray Cloth",
+  "641": "Table Mat",
+  "642": "Sofa Throw",
+  "643": "Woven Gloves/Mitton Gloves",
+  "644": "Mats/Door Mats",
+  "645": "Matting (Longer Length)",
+  "646": "Floor Covering",
+  "647": "Fridge Cover",
+  "648": "Washing Machine Cover",
+  "649": "Car Cover",
+  "650": "Scooter Cover",
+  "651": "Computer Cover (Pc & Monitor)",
+  "652": "Computer Printer Cover",
+  "653": "Scanner Cover",
+  "654": "Pancha/Gamcha/Thorth",
+  "655": "Shabnam Bag/Zoli",
+  "656": "Valances",
+  "657": "Any Other Unspecified Household Products"
+};
+
+// Knitted / Hosiery Varieties (801-950)
+const Map<String, String> knittedCodes = {
+  "801": "Banian / Ganji (M)",
+  "802": "Socks / Moja (M)",
+  "803": "Underwear(M)",
+  "804": "Sweater(M)",
+  "805": "Puller over(M)",
+  "806": "Scarf/Schariya(M)",
+  "807": "Muffler(M)",
+  "808": "T-Shirt(M)",
+  "809": "Gloves(M)",
+  "810": "Stockings(M)",
+  "811": "Swimming Suit(M)",
+  "812": "Track Suit(M)",
+  "813": "Inner Trouser(M)",
+  "814": "Thermo Suit(M)",
+  "815": "Knitted Baba Suit(T-Shirt Suit)",
+  "816": "Monkey Cap/Other Cap(M)",
+  "901": "Banian (F)",
+  "902": "Socks(F)",
+  "903": "Underwear/Panties (F)",
+  "904": "Sweater(F)",
+  "905": "Pullover(F)",
+  "906": "Scarf(F)",
+  "907": "Muffler(F)",
+  "908": "T-Shirt(F)",
+  "909": "Gloves(F)",
+  "910": "Stockings(F)",
+  "911": "Swimming Suit(F)",
+  "912": "Track Suit(F)",
+  "913": "Inner Trousers(F)",
+  "914": "Thermo Suit(F)",
+  "915": "Knitted Baby Suit(F)",
+  "916": "Monkey Cap/Other Cap(F)",
+  "920": "Thermo cots",
+  "921": "Baba / Baby Jackets",
+  "922": "Baba / Baby Coats",
+  "923": "Baba / Baby Sweater",
+  "924": "Baby Cap / Topara",
+  "925": "Other Un-Specified Items",
+  "926": "Printed Leggings",
+  "927": "3/4th Leggings",
+  "928": "Plain Leggings"
 };
 
 // Brand Names - Shirt (101-179)
@@ -610,7 +630,13 @@ const Map<String, String> undergarmentBrandCodes = {
   "639": "VIP"
 };
 
-// Textile Mills (701-863) - Top 50 most common
+// General Brand Codes
+const Map<String, String> generalBrandCodes = {
+  "998": "Un Branded",
+  "999": "Not Known to Respondent"
+};
+
+// Textile Mills (701-863)
 const Map<String, String> millCodes = {
   "701": "AARVEE DENIMS AND EXPORTS LIMITED",
   "702": "ADITYA BIRLA NUVO LTD",
@@ -775,16 +801,126 @@ const Map<String, String> millCodes = {
   "863": "WESTERN INDIA SPG & MFG. MILLS(UAP)"
 };
 
-// General Brand Codes
-const Map<String, String> generalBrandCodes = {
-  "998": "Un Branded",
-  "999": "Not Known to Respondent"
+// Income Group Codes
+const Map<String, String> incomeGroupCodes = {
+  "01": "Below Poverty Line",
+  "02": "Lower Income Group",
+  "03": "Lower Middle Income Group",
+  "04": "Middle Income Group",
+  "05": "Upper Middle Income Group",
+  "06": "Upper Income Group",
+  "07": "High Income Group",
+  "08": "Very High Income Group"
+};
+
+// Occupation Codes (MPR)
+const Map<String, String> occupationCodes = {
+  "01": "Agriculture",
+  "02": "Business",
+  "03": "Service",
+  "04": "Professional",
+  "05": "Skilled Worker",
+  "06": "Unskilled Worker",
+  "07": "Student",
+  "08": "Housewife",
+  "09": "Retired",
+  "10": "Unemployed",
+  "11": "Other"
+};
+
+// Month Codes
+const Map<String, String> monthCodes = {
+  "01": "January",
+  "02": "February",
+  "03": "March",
+  "04": "April",
+  "05": "May",
+  "06": "June",
+  "07": "July",
+  "08": "August",
+  "09": "September",
+  "10": "October",
+  "11": "November",
+  "12": "December"
+};
+
+// Fibre Codes
+const Map<String, String> fibreCodes = {
+  "01": "Cotton",
+  "02": "Wool",
+  "03": "Silk",
+  "04": "Jute",
+  "05": "Synthetic",
+  "06": "Blend",
+  "07": "Other Natural",
+  "08": "Other"
+};
+
+// Sector Codes
+const Map<String, String> sectorCodes = {
+  "01": "Organized",
+  "02": "Unorganized",
+  "03": "Handloom",
+  "04": "Powerloom",
+  "05": "Mill",
+  "06": "Other"
+};
+
+// Colour Codes
+const Map<String, String> colourCodes = {
+  "01": "White",
+  "02": "Black",
+  "03": "Red",
+  "04": "Blue",
+  "05": "Green",
+  "06": "Yellow",
+  "07": "Orange",
+  "08": "Pink",
+  "09": "Purple",
+  "10": "Brown",
+  "11": "Grey",
+  "12": "Multi-colour",
+  "13": "Other"
+};
+
+// Shop Type Codes
+const Map<String, String> shopTypeCodes = {
+  "01": "Retail Shop",
+  "02": "Wholesale Market",
+  "03": "Shopping Mall",
+  "04": "Online",
+  "05": "Street Vendor",
+  "06": "Exhibition",
+  "07": "Other"
+};
+
+// Purchase Type Codes
+const Map<String, String> purchaseTypeCodes = {
+  "01": "Cash",
+  "02": "Credit",
+  "03": "EMI",
+  "04": "Online Payment",
+  "05": "Other"
+};
+
+// Dress Intended Codes
+const Map<String, String> dressIntendedCodes = {
+  "01": "Personal Use",
+  "02": "Gift",
+  "03": "Family Member",
+  "04": "Resale",
+  "05": "Other"
 };
 
 // Helper function to get all brand codes combined
 Map<String, String> getAllBrandCodes() {
   Map<String, String> allBrands = {};
   allBrands.addAll(shirtBrandCodes);
+  allBrands.addAll(trouserBrandCodes);
+  allBrands.addAll(jeansBrandCodes);
+  allBrands.addAll(suitBrandCodes);
+  allBrands.addAll(tshirtBrandCodes);
+  allBrands.addAll(undergarmentBrandCodes);
   allBrands.addAll(generalBrandCodes);
   return allBrands;
 }
@@ -793,5 +929,9 @@ Map<String, String> getAllBrandCodes() {
 Map<String, String> getAllItemCodes() {
   Map<String, String> allItems = {};
   allItems.addAll(varietyCodes);
+  allItems.addAll(garmentCodes);
+  allItems.addAll(wovenGarmentCodes);
+  allItems.addAll(householdCodes);
+  allItems.addAll(knittedCodes);
   return allItems;
 } 

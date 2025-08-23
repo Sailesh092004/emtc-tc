@@ -4,11 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../services/db_service.dart';
 import 'dpr_form.dart';
 import 'mpr_form.dart';
-import 'fp_form.dart';
+
 import 'dpr_list.dart';
 import 'mpr_list.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
+import 'forwarding_proforma.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -221,13 +222,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // FP Form Button
+                  // Forwarding Proforma Button
                   _FormCard(
-                    title: 'Forwarding Performa (FP)',
-                    subtitle: 'Location summary and forwarding data',
+                    title: 'Forwarding Proforma',
+                    subtitle: 'Summary & submission to Regional Office',
                     icon: Icons.location_on,
-                    color: const Color(0xFFFF8A65), // Deep Orange 300
-                    onTap: () => _navigateToForm(context, 'fp'),
+                    color: const Color(0xFFAB47BC), // Purple 400
+                    onTap: () => _navigateToForm(context, 'forwarding_proforma'),
                   ),
                                      const SizedBox(height: 32), // Extra padding at bottom
                  ],
@@ -251,10 +252,11 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute(builder: (context) => const DashboardScreen()),
         );
         break;
-      case 'fp':
+
+      case 'forwarding_proforma':
         Navigator.push(
           context,
-          MaterialPageRoute(builder: (context) => const FPFormScreen()),
+          MaterialPageRoute(builder: (context) => const ForwardingProformaScreen()),
         ).then((_) => _loadStats()); // Refresh stats when returning
         break;
       default:

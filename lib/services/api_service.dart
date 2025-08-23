@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/dpr.dart';
 import '../models/mpr.dart';
-import '../models/fp.dart';
+
 
 class ApiService {
   // eMTC FastAPI backend URL - Updated to use deployed backend
@@ -39,7 +39,8 @@ class ApiService {
       'fibre_code': item.fibreCode,
       'sector_of_manufacture_code': item.sectorOfManufactureCode,
       'colour_design_code': item.colourDesignCode,
-      'person_age_gender': item.personAgeGender,
+      'gender': item.gender,
+      'age': item.age,
       'type_of_shop_code': item.typeOfShopCode,
       'purchase_type_code': item.purchaseTypeCode,
       'dress_intended_code': item.dressIntendedCode,
@@ -211,24 +212,40 @@ class ApiService {
   // Sync MPR data to backend
   Future<bool> syncMPR(MPR mpr) async {
     try {
+      final Map<String, dynamic> mprData = {
+        'name_and_address': mpr.nameAndAddress,
+        'district_state_tel': mpr.districtStateTel,
+        'panel_centre': mpr.panelCentre,
+        'centre_code': mpr.centreCode,
+        'return_no': mpr.returnNo,
+        'family_size': mpr.familySize,
+        'income_group': mpr.incomeGroup,
+        'month_and_year': mpr.monthAndYear,
+        'occupation_of_head': mpr.occupationOfHead,
+        'items': mpr.items.map((item) => _convertPurchaseItemToBackendFormat(item)).toList(),
+        'latitude': mpr.latitude,
+        'longitude': mpr.longitude,
+        'otp_code': mpr.otpCode,
+      };
+      
+      // Include income data from DPR if available (for backend reference)
+      if (mpr.annualIncomeJob != null) {
+        mprData['annual_income_job'] = mpr.annualIncomeJob;
+      }
+      if (mpr.annualIncomeOther != null) {
+        mprData['annual_income_other'] = mpr.annualIncomeOther;
+      }
+      if (mpr.otherIncomeSource != null) {
+        mprData['other_income_source'] = mpr.otherIncomeSource;
+      }
+      if (mpr.totalIncome != null) {
+        mprData['total_income'] = mpr.totalIncome;
+      }
+      
       final response = await http.post(
         Uri.parse('$_baseUrl/mpr'),
         headers: _headers,
-        body: jsonEncode({
-          'name_and_address': mpr.nameAndAddress,
-          'district_state_tel': mpr.districtStateTel,
-          'panel_centre': mpr.panelCentre,
-          'centre_code': mpr.centreCode,
-          'return_no': mpr.returnNo,
-          'family_size': mpr.familySize,
-          'income_group': mpr.incomeGroup,
-          'month_and_year': mpr.monthAndYear,
-          'occupation_of_head': mpr.occupationOfHead,
-          'items': mpr.items.map((item) => _convertPurchaseItemToBackendFormat(item)).toList(),
-          'latitude': mpr.latitude,
-          'longitude': mpr.longitude,
-          'otp_code': mpr.otpCode,
-        }),
+        body: jsonEncode(mprData),
       ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -264,10 +281,15 @@ class ApiService {
           'latitude': mpr.latitude,
           'longitude': mpr.longitude,
           'otp_code': mpr.otpCode,
+          // Include income fields if available
+          if (mpr.annualIncomeJob != null) 'annual_income_job': mpr.annualIncomeJob,
+          if (mpr.annualIncomeOther != null) 'annual_income_other': mpr.annualIncomeOther,
+          if (mpr.otherIncomeSource != null) 'other_income_source': mpr.otherIncomeSource,
+          if (mpr.totalIncome != null) 'total_income': mpr.totalIncome,
         }),
       ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         print('MPR updated successfully: ${mpr.returnNo}');
         return true;
       } else {
@@ -277,6 +299,65 @@ class ApiService {
     } catch (e) {
       print('Error updating MPR: $e');
       return false;
+    }
+  }
+
+  // Submit ForwardingProforma handoff package to backend
+  Future<Map<String, dynamic>> submitHandoff({
+    required String centerCode,
+    required String periodId,
+    required String loId,
+    required Map<String, dynamic> fpData,
+    required String fpPdfPath,
+    required String mprZipPath,
+    required String manifestJsonPath,
+  }) async {
+    try {
+      // Create multipart request
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$_baseUrl/handoff/$centerCode/$periodId/$loId'),
+      );
+
+      // Add FP JSON data
+      request.fields['fp_data'] = jsonEncode(fpData);
+
+      // Add FP PDF file
+      final fpPdfFile = await http.MultipartFile.fromPath(
+        'fp_pdf',
+        fpPdfPath,
+      );
+      request.files.add(fpPdfFile);
+
+      // Add MPR ZIP file
+      final mprZipFile = await http.MultipartFile.fromPath(
+        'mprs_zip',
+        mprZipPath,
+      );
+      request.files.add(mprZipFile);
+
+      // Add manifest JSON file
+      final manifestFile = await http.MultipartFile.fromPath(
+        'manifest_json',
+        manifestJsonPath,
+      );
+      request.files.add(manifestFile);
+
+      // Send request
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = jsonDecode(response.body) as Map<String, dynamic>;
+        print('Handoff submitted successfully: ${responseData['packageId']}');
+        return responseData;
+      } else {
+        print('Failed to submit handoff: ${response.statusCode} - ${response.body}');
+        throw Exception('Failed to submit handoff: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('Error submitting handoff: $e');
+      rethrow;
     }
   }
 
@@ -310,68 +391,7 @@ class ApiService {
     };
   }
 
-  // Sync FP data to backend
-  Future<bool> syncFP(FP fp) async {
-    try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/fp'),
-        headers: _headers,
-        body: jsonEncode({
-          'centre_name': fp.centreName,
-          'centre_code': fp.centreCode,
-          'panel_size': fp.panelSize,
-          'mpr_collected': fp.mprCollected,
-          'not_collected': fp.notCollected,
-          'with_purchase_data': fp.withPurchaseData,
-          'nil_mprs': fp.nilMPRs,
-          'nil_serial_nos': fp.nilSerialNos,
-          'latitude': fp.latitude,
-          'longitude': fp.longitude,
-        }),
-      ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        print('FP synced successfully: ${fp.centreCode}');
-        return true;
-      } else {
-        print('Failed to sync FP: ${response.statusCode} - ${response.body}');
-        return false;
-    }
-    } catch (e) {
-      print('Error syncing FP: $e');
-      return false;
-    }
-  }
-
-  // Sync multiple FP records
-  Future<Map<String, dynamic>> syncMultipleFP(List<FP> fpList) async {
-    if (fpList.isEmpty) {
-      return {'success': true, 'synced': 0, 'failed': 0};
-    }
-
-    int synced = 0;
-    int failed = 0;
-
-    for (FP fp in fpList) {
-      try {
-        final success = await syncFP(fp);
-        if (success) {
-          synced++;
-        } else {
-          failed++;
-        }
-      } catch (e) {
-        print('Error syncing FP ${fp.centreCode}: $e');
-        failed++;
-      }
-    }
-
-    return {
-      'success': failed == 0,
-      'synced': synced,
-      'failed': failed,
-    };
-  }
 
   // Get sync status from backend
   Future<Map<String, dynamic>> getSyncStatus() async {
@@ -473,5 +493,54 @@ class ApiService {
     return false;
   }
 
+  // Fetch DPR data for MPR form
+  Future<Map<String, dynamic>> fetchDprFor(String centerId, String householdId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/dpr?centre_code=$centerId&return_no=$householdId'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 10));
 
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['data'] != null && data['data'].isNotEmpty) {
+          final dpr = data['data'][0];
+          return {
+            'id': dpr['id'],
+            'centreCode': dpr['centre_code'],
+            'returnNo': dpr['return_no'],
+            'members': dpr['household_members'] ?? [],
+          };
+        }
+      }
+      
+      throw Exception('DPR not found for $centerId/$householdId');
+    } catch (e) {
+      print('Error fetching DPR: $e');
+      rethrow;
+    }
+  }
+
+  // Fetch DPR data for a specific center
+  Future<Map<String, dynamic>?> fetchDprForCenter(String centerCode) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/dpr/center/$centerCode'),
+        headers: _headers,
+      ).timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return data;
+      } else if (response.statusCode == 404) {
+        return null; // No DPR found for this center
+      } else {
+        print('Failed to fetch DPR for center: ${response.statusCode} - ${response.body}');
+        return null;
+      }
+    } catch (e) {
+      print('Error fetching DPR for center: $e');
+      return null;
+    }
+  }
 } 

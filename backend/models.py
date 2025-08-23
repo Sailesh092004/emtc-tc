@@ -31,7 +31,8 @@ class PurchaseItem(BaseModel):
     fibre_code: str = Field(..., description="Fibre code")
     sector_of_manufacture_code: str = Field(..., description="Sector of manufacture code")
     colour_design_code: str = Field(..., description="Colour/Design code")
-    person_age_gender: str = Field(..., description="Person age and gender")
+    gender: Optional[str] = Field(None, description="Person gender (M/F)")
+    age: Optional[int] = Field(None, description="Person age")
     type_of_shop_code: str = Field(..., description="Type of shop code")
     purchase_type_code: str = Field(..., description="Purchase type code")
     dress_intended_code: str = Field(..., description="Dress intended code")
@@ -51,7 +52,7 @@ class DPRBase(BaseModel):
     centre_code: str = Field(..., description="Centre code")
     return_no: str = Field(..., description="Return number")
     month_and_year: str = Field(..., description="Month and year")
-    household_members: List[HouseholdMember] = Field(..., max_items=8, description="Household members (max 8)")
+    household_members: List[HouseholdMember] = Field(..., description="Household members")
 
 class DPRCreate(DPRBase, LocationBase):
     otp_code: str = Field(..., description="OTP code for verification")
@@ -78,7 +79,7 @@ class MPRBase(BaseModel):
     income_group: str = Field(..., description="Income group")
     month_and_year: str = Field(..., description="Month and year")
     occupation_of_head: str = Field(..., description="Occupation of head of family")
-    items: List[PurchaseItem] = Field(..., max_items=10, description="Purchase items (max 10)")
+    items: List[PurchaseItem] = Field(..., description="Purchase items")
 
 class MPRCreate(MPRBase, LocationBase):
     otp_code: str = Field(..., description="OTP code for verification")

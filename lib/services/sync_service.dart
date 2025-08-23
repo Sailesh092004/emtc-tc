@@ -6,7 +6,7 @@ import 'api_service.dart';
 import 'db_service.dart';
 import '../models/dpr.dart';
 import '../models/mpr.dart';
-import '../models/fp.dart';
+
 
 class SyncService extends ChangeNotifier {
   final DatabaseService _dbService;
@@ -103,20 +103,19 @@ class SyncService extends ChangeNotifier {
       _lastSyncStatus = 'syncing';
       notifyListeners();
 
-      // Get unsynced DPR, MPR, and FP records
+      // Get unsynced DPR and MPR records
       final unsyncedDPR = await _dbService.getUnsyncedDPR();
       final unsyncedMPR = await _dbService.getUnsyncedMPR();
-      final unsyncedFP = await _dbService.getUnsyncedFP();
-      _pendingRecords = unsyncedDPR.length + unsyncedMPR.length + unsyncedFP.length;
+      _pendingRecords = unsyncedDPR.length + unsyncedMPR.length;
 
-      if (unsyncedDPR.isEmpty && unsyncedMPR.isEmpty && unsyncedFP.isEmpty) {
+      if (unsyncedDPR.isEmpty && unsyncedMPR.isEmpty) {
         _lastSyncStatus = 'no_data';
         _lastSyncTime = DateTime.now();
         notifyListeners();
         return;
       }
 
-      print('Syncing ${unsyncedDPR.length} DPR, ${unsyncedMPR.length} MPR, and ${unsyncedFP.length} FP records...');
+      print('Syncing ${unsyncedDPR.length} DPR and ${unsyncedMPR.length} MPR records...');
 
       // Sync DPR records
       bool dprSuccess = true;
@@ -242,24 +241,7 @@ class SyncService extends ChangeNotifier {
         }
       }
 
-      // Sync FP records
-      bool fpSuccess = true;
-      if (unsyncedFP.isNotEmpty) {
-        final fpSyncResult = await _apiService.syncMultipleFP(unsyncedFP);
-        if (fpSyncResult['success']) {
-          for (FP fp in unsyncedFP) {
-            if (fp.id != null) {
-              await _dbService.updateFPSyncStatus(fp.id!, true);
-            }
-          }
-          print('Successfully synced ${fpSyncResult['synced']} FP records');
-        } else {
-          fpSuccess = false;
-          print('FP sync failed: ${fpSyncResult['failed']} records failed');
-        }
-      }
-
-      if (dprSuccess && mprSuccess && fpSuccess) {
+      if (dprSuccess && mprSuccess) {
         _lastSyncStatus = 'success';
         _lastSyncTime = DateTime.now();
         // Save last sync time to SharedPreferences
@@ -272,8 +254,7 @@ class SyncService extends ChangeNotifier {
       // Update pending records count
       final unsyncedDprCount = await _dbService.getUnsyncedDPRCount();
       final unsyncedMprCount = await _dbService.getUnsyncedMPRCount();
-      final unsyncedFpCount = await _dbService.getUnsyncedFPCount();
-      _pendingRecords = unsyncedDprCount + unsyncedMprCount + unsyncedFpCount;
+      _pendingRecords = unsyncedDprCount + unsyncedMprCount;
 
     } catch (e) {
       print('Error during sync: $e');
@@ -311,11 +292,9 @@ class SyncService extends ChangeNotifier {
 
       final allDPR = await _dbService.getAllDPR();
       final allMPR = await _dbService.getAllMPR();
-      final allFP = await _dbService.getAllFP();
       
       bool dprSuccess = true;
       bool mprSuccess = true;
-      bool fpSuccess = true;
 
       if (allDPR.isNotEmpty) {
         final dprSyncResult = await _apiService.syncMultipleDPR(allDPR);
@@ -345,21 +324,7 @@ class SyncService extends ChangeNotifier {
         }
       }
 
-      if (allFP.isNotEmpty) {
-        final fpSyncResult = await _apiService.syncMultipleFP(allFP);
-        if (fpSyncResult['success']) {
-          // Mark all FP records as synced
-          for (FP fp in allFP) {
-            if (fp.id != null) {
-              await _dbService.updateFPSyncStatus(fp.id!, true);
-            }
-          }
-        } else {
-          fpSuccess = false;
-        }
-      }
-
-      if (dprSuccess && mprSuccess && fpSuccess) {
+      if (dprSuccess && mprSuccess) {
         _lastSyncStatus = 'force_success';
         _lastSyncTime = DateTime.now();
         // Save last sync time to SharedPreferences
@@ -371,8 +336,7 @@ class SyncService extends ChangeNotifier {
 
       final unsyncedDprCount = await _dbService.getUnsyncedDPRCount();
       final unsyncedMprCount = await _dbService.getUnsyncedMPRCount();
-      final unsyncedFpCount = await _dbService.getUnsyncedFPCount();
-      _pendingRecords = unsyncedDprCount + unsyncedMprCount + unsyncedFpCount;
+      _pendingRecords = unsyncedDprCount + unsyncedMprCount;
 
     } catch (e) {
       print('Error during force sync: $e');
@@ -387,8 +351,7 @@ class SyncService extends ChangeNotifier {
   Future<void> updatePendingCount() async {
     final unsyncedDprCount = await _dbService.getUnsyncedDPRCount();
     final unsyncedMprCount = await _dbService.getUnsyncedMPRCount();
-    final unsyncedFpCount = await _dbService.getUnsyncedFPCount();
-    _pendingRecords = unsyncedDprCount + unsyncedMprCount + unsyncedFpCount;
+    _pendingRecords = unsyncedDprCount + unsyncedMprCount;
     notifyListeners();
   }
 

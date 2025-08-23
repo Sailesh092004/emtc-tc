@@ -30,8 +30,14 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
   final _monthAndYearController = TextEditingController();
   final _occupationOfHeadController = TextEditingController();
   final _otpController = TextEditingController();
+  
+  // Income fields from DPR (read-only when auto-filled)
+  final _annualIncomeJobController = TextEditingController();
+  final _annualIncomeOtherController = TextEditingController();
+  final _otherIncomeSourceController = TextEditingController();
+  final _totalIncomeController = TextEditingController();
 
-  // Purchase Items (up to 10)
+  // Purchase Items
   final List<PurchaseItemForm> _purchaseItems = [];
 
   // Location data
@@ -60,6 +66,10 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     _monthAndYearController.text = '${DateTime.now().month}/${DateTime.now().year}';
     _addPurchaseItem(); // Add first item by default
     
+    // Add listeners to trigger DPR loading when centre code or return number changes
+    _centreCodeController.addListener(_onCentreOrReturnChanged);
+    _returnNoController.addListener(_onCentreOrReturnChanged);
+    
     // If editing, populate the form with existing data
     if (widget.editingMPR != null) {
       _populateFormWithMPR(widget.editingMPR!);
@@ -71,13 +81,22 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     _nameAndAddressController.dispose();
     _districtStateTelController.dispose();
     _panelCentreController.dispose();
+    _centreCodeController.removeListener(_onCentreOrReturnChanged);
     _centreCodeController.dispose();
+    _returnNoController.removeListener(_onCentreOrReturnChanged);
     _returnNoController.dispose();
     _familySizeController.dispose();
     _incomeGroupController.dispose();
     _monthAndYearController.dispose();
     _occupationOfHeadController.dispose();
     _otpController.dispose();
+    
+    // Dispose income controllers
+    _annualIncomeJobController.dispose();
+    _annualIncomeOtherController.dispose();
+    _otherIncomeSourceController.dispose();
+    _totalIncomeController.dispose();
+    
     super.dispose();
   }
 
@@ -127,6 +146,94 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
+  }
+
+  // DPR-driven gender and age options
+  List<Map<String, dynamic>> _dprMembers = [];
+  
+  Future<void> _loadDpr() async {
+    if (_centreCodeController.text.isEmpty || _returnNoController.text.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _isLoadingDPR = true;
+      _dprLoadMessage = 'Loading DPR data...';
+    });
+
+    try {
+      final dbService = Provider.of<DatabaseService>(context, listen: false);
+      final cached = await dbService.getDprFor(_centreCodeController.text, _returnNoController.text);
+      
+      Map<String, dynamic>? dpr = cached;
+      if (dpr == null) {
+        try {
+          dpr = await _apiService.fetchDprFor(_centreCodeController.text, _returnNoController.text);
+          await dbService.cacheDprFor(_centreCodeController.text, _returnNoController.text, dpr);
+        } catch (e) {
+          print('Failed to fetch DPR from API: $e');
+        }
+      }
+
+      setState(() {
+        _dprMembers = (dpr?['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+        _isLoadingDPR = false;
+        _dprLoadMessage = null;
+        
+        // Reset gender/age selections if they're no longer valid
+        for (var item in _purchaseItems) {
+          if (item.selectedGender != null && !_hasGender(item.selectedGender!, _dprMembers)) {
+            item.selectedGender = null;
+          }
+          if (item.selectedAge != null && !_hasAge(item.selectedAge!, item.selectedGender, _dprMembers)) {
+            item.selectedAge = null;
+          }
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _isLoadingDPR = false;
+        _dprLoadMessage = 'Failed to load DPR: $e';
+      });
+    }
+  }
+
+  bool _hasGender(String gender, List<Map<String, dynamic>> members) {
+    return members.any((member) => (member['gender'] as String?)?.toUpperCase() == gender);
+  }
+
+  bool _hasAge(int age, String? gender, List<Map<String, dynamic>> members) {
+    if (gender == null) return false;
+    return members.any((member) => 
+      (member['gender'] as String?)?.toUpperCase() == gender && 
+      (member['age'] as int?) == age
+    );
+  }
+
+  List<String> _getGenderOptions() {
+    final set = <String>{};
+    for (final member in _dprMembers) {
+      final gender = (member['gender'] as String?)?.toUpperCase();
+      if (gender == 'M' || gender == 'F') {
+        set.add(gender!);
+      }
+    }
+    return set.toList()..sort(); // e.g., ["F", "M"]
+  }
+
+  List<int> _getAgeOptions(String? selectedGender) {
+    if (selectedGender == null) return const [];
+    
+    final set = <int>{};
+    for (final member in _dprMembers) {
+      if ((member['gender'] as String?)?.toUpperCase() == selectedGender) {
+        final age = member['age'];
+        if (age is int) {
+          set.add(age);
+        }
+      }
+    }
+    return set.toList()..sort();
   }
 
   Future<void> _verifyOTP() async {
@@ -188,15 +295,9 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
   }
 
   void _addPurchaseItem() {
-    if (_purchaseItems.length < 10) {
-      setState(() {
-        _purchaseItems.add(PurchaseItemForm());
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Maximum 10 purchase items allowed'), backgroundColor: Colors.orange),
-      );
-    }
+    setState(() {
+      _purchaseItems.add(PurchaseItemForm());
+    });
   }
 
   void _removePurchaseItem(int index) {
@@ -251,7 +352,8 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         fibreCode: form.fibreCodeController.text,
         sectorOfManufactureCode: form.sectorCodeController.text,
         colourDesignCode: form.colourCodeController.text,
-        personAgeGender: form.personAgeGenderController.text,
+        gender: form.selectedGender,
+        age: form.selectedAge,
         typeOfShopCode: form.shopTypeCodeController.text,
         purchaseTypeCode: form.purchaseTypeCodeController.text,
         dressIntendedCode: form.dressIntendedCodeController.text,
@@ -278,6 +380,15 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         otpCode: _otpController.text,
         createdAt: DateTime.now(),
         loPhone: currentLoPhone,
+        // Include income data from DPR if available
+        annualIncomeJob: _annualIncomeJobController.text.isNotEmpty ? 
+          double.tryParse(_annualIncomeJobController.text) : null,
+        annualIncomeOther: _annualIncomeOtherController.text.isNotEmpty ? 
+          double.tryParse(_annualIncomeOtherController.text) : null,
+        otherIncomeSource: _otherIncomeSourceController.text.isNotEmpty ? 
+          _otherIncomeSourceController.text : null,
+        totalIncome: _totalIncomeController.text.isNotEmpty ? 
+          double.tryParse(_totalIncomeController.text) : null,
       );
 
       final dbService = Provider.of<DatabaseService>(context, listen: false);
@@ -363,6 +474,26 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     _longitude = mpr.longitude;
     _isOtpVerified = true; // Assume OTP is already verified for existing records
     
+    // Populate income fields if available
+    if (mpr.annualIncomeJob != null) {
+      _annualIncomeJobController.text = mpr.annualIncomeJob!.toStringAsFixed(2);
+    }
+    if (mpr.annualIncomeOther != null) {
+      _annualIncomeOtherController.text = mpr.annualIncomeOther!.toStringAsFixed(2);
+    }
+    if (mpr.otherIncomeSource != null) {
+      _otherIncomeSourceController.text = mpr.otherIncomeSource!;
+    }
+    if (mpr.totalIncome != null) {
+      _totalIncomeController.text = mpr.totalIncome!.toStringAsFixed(2);
+    }
+    
+    // Set auto-fill state if income data is available
+    if (mpr.annualIncomeJob != null || mpr.annualIncomeOther != null || 
+        mpr.otherIncomeSource != null || mpr.totalIncome != null) {
+      _isAutoFilled = true;
+    }
+    
     // Clear existing purchase items and add the ones from MPR
     for (var item in _purchaseItems) {
       item.dispose();
@@ -403,7 +534,10 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         formItem.colourCodeController.text = '';
         print('Invalid colour code found: ${item.colourDesignCode}');
       }
-      formItem.personAgeGenderController.text = item.personAgeGender;
+      
+      // Set gender and age from the new fields
+      formItem.selectedGender = item.gender;
+      formItem.selectedAge = item.age;
       if (item.typeOfShopCode.isNotEmpty && shopTypeCodes.containsKey(item.typeOfShopCode)) {
         formItem.shopTypeCodeController.text = item.typeOfShopCode;
       } else {
@@ -582,6 +716,11 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         
         // Find occupation from household members (head of family)
         String occupation = '';
+        double annualIncomeJob = 0.0;
+        double annualIncomeOther = 0.0;
+        String otherIncomeSource = '';
+        double totalIncome = 0.0;
+        
         if (dpr.householdMembers.isNotEmpty) {
           // Assume first member is head of family, or find by relationship
           final headMember = dpr.householdMembers.firstWhere(
@@ -590,6 +729,10 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
             orElse: () => dpr.householdMembers.first,
           );
           occupation = headMember.occupation;
+          annualIncomeJob = headMember.annualIncomeJob;
+          annualIncomeOther = headMember.annualIncomeOther;
+          otherIncomeSource = headMember.otherIncomeSource;
+          totalIncome = headMember.totalIncome;
         }
         
         // Only set occupation if it exists in the dropdown options
@@ -598,6 +741,12 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
         } else {
           _occupationOfHeadController.text = ''; // Clear if invalid
         }
+        
+        // Set income fields (these will be read-only and for reference)
+        _annualIncomeJobController.text = annualIncomeJob.toStringAsFixed(2);
+        _annualIncomeOtherController.text = annualIncomeOther.toStringAsFixed(2);
+        _otherIncomeSourceController.text = otherIncomeSource;
+        _totalIncomeController.text = totalIncome.toStringAsFixed(2);
         
         setState(() {
           _linkedMobileNumber = dpr.mobileNumber; // Store linked mobile number
@@ -647,6 +796,12 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
     }
   }
 
+  void _onCentreOrReturnChanged() {
+    if (_centreCodeController.text.isNotEmpty && _returnNoController.text.isNotEmpty) {
+      _loadDpr();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -676,6 +831,10 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
 
               // Header Information
               _buildHeaderSection(),
+              const SizedBox(height: 16),
+              
+              // DPR Status Card
+              _buildDPRStatusCard(),
               const SizedBox(height: 16),
               
               // DPR Auto-fill Status
@@ -1041,6 +1200,119 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                   return null;
                 },
               ),
+              const SizedBox(height: 16),
+
+              // Income Information Section (from DPR, read-only when auto-filled)
+              if (_isAutoFilled) ...[
+                const Text(
+                  'Income Information (from DPR)',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _annualIncomeJobController,
+                        decoration: InputDecoration(
+                          labelText: 'Annual Income (Job)',
+                          border: const OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          suffixIcon: const Icon(Icons.auto_awesome, color: Colors.green, size: 16),
+                        ),
+                        readOnly: true,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _annualIncomeOtherController,
+                        decoration: InputDecoration(
+                          labelText: 'Annual Income (Other)',
+                          border: const OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          suffixIcon: const Icon(Icons.auto_awesome, color: Colors.green, size: 16),
+                        ),
+                        readOnly: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _otherIncomeSourceController,
+                        decoration: InputDecoration(
+                          labelText: 'Other Income Source',
+                          border: const OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          suffixIcon: const Icon(Icons.auto_awesome, color: Colors.green, size: 16),
+                        ),
+                        readOnly: true,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextFormField(
+                        controller: _totalIncomeController,
+                        decoration: InputDecoration(
+                          labelText: 'Total Income',
+                          border: const OutlineInputBorder(),
+                          filled: true,
+                          fillColor: Colors.grey.shade100,
+                          suffixIcon: const Icon(Icons.auto_awesome, color: Colors.green, size: 16),
+                        ),
+                        readOnly: true,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+              ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDPRStatusCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  _isLoadingDPR ? Icons.sync : (_dprMembers.isNotEmpty ? Icons.check_circle : Icons.info),
+                  color: _isLoadingDPR ? Colors.orange : (_dprMembers.isNotEmpty ? Colors.green : Colors.blue),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  _isLoadingDPR ? 'Loading DPR Data...' : (_dprMembers.isNotEmpty ? 'DPR Data Loaded' : 'DPR Status'),
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            if (_isLoadingDPR) ...[
+              const SizedBox(height: 8),
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              Text(_dprLoadMessage ?? ''),
+            ] else if (_dprMembers.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text('Household Members: ${_dprMembers.length}'),
+              Text('Available Genders: ${_getGenderOptions().join(', ')}'),
+            ] else ...[
+              const SizedBox(height: 8),
+              Text('Enter Centre Code and Return Number to load DPR data'),
+            ],
           ],
         ),
       ),
@@ -1058,7 +1330,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
-                  'Purchase Items (Max 10)',
+                  'Purchase Items',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
                 ElevatedButton.icon(
@@ -1121,29 +1393,97 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
-                    value: item.itemCodeController.text.isEmpty || !varietyCodes.containsKey(item.itemCodeController.text) ? null : item.itemCodeController.text,
+                    value: item.itemCodeController.text.isEmpty || !getAllItemCodes().containsKey(item.itemCodeController.text) ? null : item.itemCodeController.text,
                     decoration: const InputDecoration(
                       labelText: 'Item Code *',
                       border: OutlineInputBorder(),
-                      helperText: 'Select from standardized item codes',
+                      helperText: 'Select from comprehensive standardized item codes',
                     ),
                     isExpanded: true,
-                    items: varietyCodes.entries.map((e) => 
-                      DropdownMenuItem(
-                        value: e.key, 
-                        child: Text(
-                          '${e.key} - ${e.value}',
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                    items: [
+                      // Add category separators for better organization
+                      const DropdownMenuItem(
+                        value: null,
+                        enabled: false,
+                        child: Text('--- PIECE LENGTH VARIETIES ---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue)),
+                      ),
+                      ...varietyCodes.entries.map((e) => 
+                        DropdownMenuItem(
+                          value: e.key, 
+                          child: Text(
+                            '${e.key} - ${e.value}',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          )
                         )
-                      )
-                    ).toList(),
+                      ),
+                      const DropdownMenuItem(
+                        value: null,
+                        enabled: false,
+                        child: Text('--- GARMENTS IN PIECE LENGTH ---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+                      ),
+                      ...getAllItemCodes().entries.where((e) => int.parse(e.key) >= 201 && int.parse(e.key) <= 300).map((e) => 
+                        DropdownMenuItem(
+                          value: e.key, 
+                          child: Text(
+                            '${e.key} - ${e.value}',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          )
+                        )
+                      ),
+                      const DropdownMenuItem(
+                        value: null,
+                        enabled: false,
+                        child: Text('--- WOVEN READYMADE GARMENTS ---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange)),
+                      ),
+                      ...getAllItemCodes().entries.where((e) => int.parse(e.key) >= 401 && int.parse(e.key) <= 600).map((e) => 
+                        DropdownMenuItem(
+                          value: e.key, 
+                          child: Text(
+                            '${e.key} - ${e.value}',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          )
+                        )
+                      ),
+                      const DropdownMenuItem(
+                        value: null,
+                        enabled: false,
+                        child: Text('--- WOVEN HOUSEHOLD VARIETIES ---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.purple)),
+                      ),
+                      ...getAllItemCodes().entries.where((e) => int.parse(e.key) >= 601 && int.parse(e.key) <= 700).map((e) => 
+                        DropdownMenuItem(
+                          value: e.key, 
+                          child: Text(
+                            '${e.key} - ${e.value}',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          )
+                        )
+                      ),
+                      const DropdownMenuItem(
+                        value: null,
+                        enabled: false,
+                        child: Text('--- KNITTED/HOSIERY VARIETIES ---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                      ),
+                      ...getAllItemCodes().entries.where((e) => int.parse(e.key) >= 801 && int.parse(e.key) <= 950).map((e) => 
+                        DropdownMenuItem(
+                          value: e.key, 
+                          child: Text(
+                            '${e.key} - ${e.value}',
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          )
+                        )
+                      ),
+                    ],
                     onChanged: (value) {
                       item.itemCodeController.text = value ?? '';
                     },
                     validator: (value) {
                       if (value?.isEmpty == true) return 'Required';
-                      if (value != null && !varietyCodes.containsKey(value)) {
+                      if (value != null && !getAllItemCodes().containsKey(value)) {
                         // Clear invalid value
                         item.itemCodeController.text = '';
                         return 'Invalid item code';
@@ -1303,18 +1643,6 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
             Row(
               children: [
                 Expanded(
-                  child: TextFormField(
-                    controller: item.personAgeGenderController,
-                    decoration: const InputDecoration(
-                      labelText: 'Age & Gender *',
-                      border: OutlineInputBorder(),
-                      hintText: 'e.g., 25M, 30F',
-                    ),
-                    validator: (value) => value?.isEmpty == true ? 'Required' : null,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
                   child: DropdownButtonFormField<String>(
                     value: item.shopTypeCodeController.text.isEmpty || !shopTypeCodes.containsKey(item.shopTypeCodeController.text) ? null : item.shopTypeCodeController.text,
                     decoration: const InputDecoration(
@@ -1346,12 +1674,7 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                     },
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
+                const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: item.purchaseTypeCodeController.text.isEmpty || !purchaseTypeCodes.containsKey(item.purchaseTypeCodeController.text) ? null : item.purchaseTypeCodeController.text,
@@ -1384,7 +1707,12 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
                     },
                   ),
                 ),
-                const SizedBox(width: 16),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
                 Expanded(
                   child: DropdownButtonFormField<String>(
                     value: item.dressIntendedCodeController.text.isEmpty || !dressIntendedCodes.containsKey(item.dressIntendedCodeController.text) ? null : item.dressIntendedCodeController.text,
@@ -1424,7 +1752,59 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: TextFormField(
+                    child: DropdownButtonFormField<String>(
+                    value: item.selectedGender,
+                    decoration: const InputDecoration(
+                      labelText: 'Gender *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _getGenderOptions().map((gender) => 
+                      DropdownMenuItem(value: gender, child: Text(gender == 'M' ? 'Male' : 'Female')),
+                    ).toList(),
+                    onChanged: (value) {
+                      setState(() {
+                        item.selectedGender = value;
+                        item.selectedAge = null; // Reset age when gender changes
+                      });
+                    },
+                    validator: (value) {
+                      // Only required when not a gift purchase
+                      if (value == null || value.isEmpty) return 'Select gender';
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<int>(
+                    value: item.selectedAge,
+                    decoration: const InputDecoration(
+                      labelText: 'Age *',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: _getAgeOptions(item.selectedGender).map((age) => 
+                      DropdownMenuItem(value: age, child: Text('$age'))
+                    ).toList(),
+                    onChanged: item.selectedGender != null ? (value) {
+                      setState(() {
+                        item.selectedAge = value;
+                      });
+                    } : null,
+                    validator: (value) {
+                      // Only required when gender is selected and not a gift purchase
+                      if (item.selectedGender != null && value == null) return 'Select age';
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
                     controller: item.lengthInMetersController,
                       decoration: const InputDecoration(
                       labelText: 'Length (m) *',
@@ -1506,27 +1886,61 @@ class _MPRFormScreenState extends State<MPRFormScreen> {
             const SizedBox(height: 16),
 
             DropdownButtonFormField<String>(
-              value: item.brandMillNameController.text.isEmpty || !millCodes.containsKey(item.brandMillNameController.text) ? null : item.brandMillNameController.text,
+              value: item.brandMillNameController.text.isEmpty || (!millCodes.containsKey(item.brandMillNameController.text) && !getAllBrandCodes().containsKey(item.brandMillNameController.text)) ? null : item.brandMillNameController.text,
               decoration: const InputDecoration(
                 labelText: 'Brand/Mill *',
                 border: OutlineInputBorder(),
-                helperText: 'Select from registered textile mills',
+                helperText: 'Select from comprehensive brand names and registered textile mills',
               ),
               isExpanded: true,
-              items: millCodes.entries.map((e) => 
-                DropdownMenuItem(
-                  value: e.key, 
-                  child: Text(
-                    '${e.key} - ${e.value}',
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
+              items: [
+                // Add a separator for brands
+                const DropdownMenuItem(
+                  value: null,
+                  enabled: false,
+                  child: Text('--- BRANDS ---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                ),
+                // Add brand options
+                ...getAllBrandCodes().entries.map((e) => 
+                  DropdownMenuItem(
+                    value: e.key, 
+                    child: Text(
+                      '${e.key} - ${e.value}',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    )
                   )
-                )
-              ).toList(),
+                ),
+                // Add a separator for mills
+                const DropdownMenuItem(
+                  value: null,
+                  enabled: false,
+                  child: Text('--- MILLS ---', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                ),
+                // Add mill options
+                ...millCodes.entries.map((e) => 
+                  DropdownMenuItem(
+                    value: e.key, 
+                    child: Text(
+                      '${e.key} - ${e.value}',
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    )
+                  )
+                ),
+              ],
               onChanged: (value) {
                 item.brandMillNameController.text = value ?? '';
               },
-              validator: (value) => value?.isEmpty == true ? 'Required' : null,
+              validator: (value) {
+                if (value?.isEmpty == true) return 'Required';
+                if (value != null && !millCodes.containsKey(value) && !getAllBrandCodes().containsKey(value)) {
+                  // Clear invalid value
+                  item.brandMillNameController.text = '';
+                  return 'Invalid brand/mill code';
+                }
+                return null;
+              },
             ),
           ],
         ),
@@ -1623,7 +2037,8 @@ class PurchaseItemForm {
   final TextEditingController fibreCodeController = TextEditingController();
   final TextEditingController sectorCodeController = TextEditingController();
   final TextEditingController colourCodeController = TextEditingController();
-  final TextEditingController personAgeGenderController = TextEditingController();
+  String? selectedGender; // Split from personAgeGender
+  int? selectedAge; // Split from personAgeGender
   final TextEditingController shopTypeCodeController = TextEditingController();
   final TextEditingController purchaseTypeCodeController = TextEditingController();
   final TextEditingController dressIntendedCodeController = TextEditingController();
@@ -1640,7 +2055,6 @@ class PurchaseItemForm {
     fibreCodeController.dispose();
     sectorCodeController.dispose();
     colourCodeController.dispose();
-    personAgeGenderController.dispose();
     shopTypeCodeController.dispose();
     purchaseTypeCodeController.dispose();
     dressIntendedCodeController.dispose();

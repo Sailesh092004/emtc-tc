@@ -1,12 +1,12 @@
 buildscript {
-    ext.kotlin_version = '2.1.0'
+    ext.kotlin_version = '2.0.0'
     repositories {
         google()
         mavenCentral()
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:8.4.0'
+        classpath 'com.android.tools.build:gradle:8.5.0'
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
@@ -26,16 +26,22 @@ allprojects {
             force "org.jetbrains.kotlin:kotlin-reflect:$kotlin_version"
         }
     }
+    
+    // Fix plugin path conflicts by ensuring consistent project structure
+    afterEvaluate { project ->
+        if (project.hasProperty('android')) {
+            project.android {
+                buildTypes {
+                    debug {
+                        debuggable true
+                    }
+                }
+            }
+        }
+    }
 }
 
-// Use a unique build directory to avoid conflicts
-rootProject.buildDir = new File(rootProject.projectDir, '../build_android')
-subprojects {
-    project.buildDir = new File(rootProject.buildDir, project.name)
-}
-subprojects {
-    project.evaluationDependsOn(':app')
-}
+
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir

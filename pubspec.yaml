@@ -24,6 +24,10 @@ dependencies:
   # HTTP requests
   http: ^1.1.0
   
+  # Crypto and security
+  crypto: ^3.0.3
+  encrypt: ^5.0.3
+  
   # UI components
   signature: ^5.4.0
   

@@ -19,6 +19,12 @@ class MPR {
   final bool isSynced;
   final int? backendId; // ID from backend after first sync
   final String? loPhone; // LO phone number for access control
+  
+  // Income fields from DPR (optional, for reference)
+  final double? annualIncomeJob;
+  final double? annualIncomeOther;
+  final String? otherIncomeSource;
+  final double? totalIncome;
 
   MPR({
     this.id,
@@ -39,6 +45,10 @@ class MPR {
     this.isSynced = false,
     this.backendId,
     this.loPhone,
+    this.annualIncomeJob,
+    this.annualIncomeOther,
+    this.otherIncomeSource,
+    this.totalIncome,
   });
 
   Map<String, dynamic> toMap() {
@@ -61,6 +71,10 @@ class MPR {
       'isSynced': isSynced ? 1 : 0,
       'backendId': backendId,
       'loPhone': loPhone,
+      'annualIncomeJob': annualIncomeJob,
+      'annualIncomeOther': annualIncomeOther,
+      'otherIncomeSource': otherIncomeSource,
+      'totalIncome': totalIncome,
     };
   }
 
@@ -98,6 +112,10 @@ class MPR {
       isSynced: map['isSynced'] == 1,
       backendId: map['backendId'],
       loPhone: map['loPhone'],
+      annualIncomeJob: map['annualIncomeJob'],
+      annualIncomeOther: map['annualIncomeOther'],
+      otherIncomeSource: map['otherIncomeSource'],
+      totalIncome: map['totalIncome'],
     );
   }
 
@@ -120,6 +138,10 @@ class MPR {
     bool? isSynced,
     int? backendId,
     String? loPhone,
+    double? annualIncomeJob,
+    double? annualIncomeOther,
+    String? otherIncomeSource,
+    double? totalIncome,
   }) {
     return MPR(
       id: id ?? this.id,
@@ -140,6 +162,10 @@ class MPR {
       isSynced: isSynced ?? this.isSynced,
       backendId: backendId ?? this.backendId,
       loPhone: loPhone ?? this.loPhone,
+      annualIncomeJob: annualIncomeJob ?? this.annualIncomeJob,
+      annualIncomeOther: annualIncomeOther ?? this.annualIncomeOther,
+      otherIncomeSource: otherIncomeSource ?? this.otherIncomeSource,
+      totalIncome: totalIncome ?? this.totalIncome,
     );
   }
 }
@@ -152,7 +178,8 @@ class PurchaseItem {
   final String fibreCode;
   final String sectorOfManufactureCode;
   final String colourDesignCode;
-  final String personAgeGender;
+  final String? gender; // Split from personAgeGender
+  final int? age; // Split from personAgeGender
   final String typeOfShopCode;
   final String purchaseTypeCode;
   final String dressIntendedCode;
@@ -170,7 +197,8 @@ class PurchaseItem {
     required this.fibreCode,
     required this.sectorOfManufactureCode,
     required this.colourDesignCode,
-    required this.personAgeGender,
+    this.gender,
+    this.age,
     required this.typeOfShopCode,
     required this.purchaseTypeCode,
     required this.dressIntendedCode,
@@ -190,7 +218,8 @@ class PurchaseItem {
       'fibreCode': fibreCode,
       'sectorOfManufactureCode': sectorOfManufactureCode,
       'colourDesignCode': colourDesignCode,
-      'personAgeGender': personAgeGender,
+      'gender': gender,
+      'age': age,
       'typeOfShopCode': typeOfShopCode,
       'purchaseTypeCode': purchaseTypeCode,
       'dressIntendedCode': dressIntendedCode,
@@ -211,7 +240,8 @@ class PurchaseItem {
       fibreCode: map['fibreCode'],
       sectorOfManufactureCode: map['sectorOfManufactureCode'],
       colourDesignCode: map['colourDesignCode'],
-      personAgeGender: map['personAgeGender'],
+      gender: map['gender'],
+      age: map['age'],
       typeOfShopCode: map['typeOfShopCode'],
       purchaseTypeCode: map['purchaseTypeCode'],
       dressIntendedCode: map['dressIntendedCode'],
@@ -231,7 +261,8 @@ class PurchaseItem {
     String? fibreCode,
     String? sectorOfManufactureCode,
     String? colourDesignCode,
-    String? personAgeGender,
+    String? gender,
+    int? age,
     String? typeOfShopCode,
     String? purchaseTypeCode,
     String? dressIntendedCode,
@@ -249,7 +280,8 @@ class PurchaseItem {
       fibreCode: fibreCode ?? this.fibreCode,
       sectorOfManufactureCode: sectorOfManufactureCode ?? this.sectorOfManufactureCode,
       colourDesignCode: colourDesignCode ?? this.colourDesignCode,
-      personAgeGender: personAgeGender ?? this.personAgeGender,
+      gender: gender ?? this.gender,
+      age: age ?? this.age,
       typeOfShopCode: typeOfShopCode ?? this.typeOfShopCode,
       purchaseTypeCode: purchaseTypeCode ?? this.purchaseTypeCode,
       dressIntendedCode: dressIntendedCode ?? this.dressIntendedCode,
